@@ -1,0 +1,56 @@
+import { Router, Request, Response } from "express";
+import { forumController } from "../controllers";
+
+export const forumRouter: Router = Router();
+
+forumRouter.post("/createCategory", (...args: [Request, Response]) =>
+  forumController.createCategory(...args)
+);
+
+forumRouter.post("/createSubCategory", (...args: [Request, Response]) =>
+  forumController.createSubCategory(...args)
+);
+
+forumRouter.get("/getForumCategoryList", (...args: [Request, Response]) =>
+  forumController.getForumCategoryList(...args)
+);
+
+forumRouter.post("/getUserDiscussion", (...args: [Request, Response]) =>
+  forumController.getUserDiscussion(...args)
+);
+
+forumRouter.post("/createDiscussion", (...args: [Request, Response]) =>
+  forumController.createDiscussion(...args)
+);
+
+forumRouter.post("/getThreadById", (...args: [Request, Response]) =>
+  forumController.getThreadById(...args)
+);
+
+forumRouter.post("/getAllPrivateThreads", (...args: [Request, Response]) =>
+  forumController.getAllPrivateThreads(...args)
+);
+
+forumRouter.delete("/deleteThread", (...args: [Request, Response]) =>
+  forumController.deleteThread(...args)
+);
+
+forumRouter.post("/readMessage", (...args: [Request, Response]) =>
+  forumController.readMessage(...args)
+);
+
+forumRouter.get("/getForumSubCategory", (...args: [Request, Response]) =>
+  forumController.getForumSubCategory(...args)
+);
+
+forumRouter.get("/getForumMainCategory", (...args: [Request, Response]) =>
+  forumController.getForumMainCategory(...args)
+);
+
+forumRouter.post("/updateCategory", (...args: [Request, Response]) =>
+  forumController.updateCategory(...args)
+);
+
+forumRouter.post("/report", (...args: [Request, Response]) =>
+  forumController.report(...args)
+);

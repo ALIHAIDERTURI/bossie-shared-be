@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Chat App</title>
+  </head>
+  <body>
+    <h1>Chatting</h1>
+    <input type="text" placeholder="Enter message" id="message" />
+    <button id="submitBtn">Send</button>
+    <button id="submitPBtn">Send Private Msg</button>
+
+    <hr />
+    <hr />
+    <input type="text" placeholder="Enter user id" id="userId" />
+    <input type="text" placeholder="Enter user name" id="userName" />
+    <input type="text" placeholder="Enter role id" id="roleId" />
+    <input type="text" placeholder="Enter to role id" id="toRoleId" />
+    <button id="getRoom">Get Room List</button>
+    <button id="lockRoom">Lock Room</button>
+    <button id="unlockRoom">UnLock Room</button>
+    <button id="privateRoom">Join Private Room</button>
+
+    <input type="text" placeholder="Enter to user id" id="toUserId" />
+    <input type="text" placeholder="Enter RoomId" id="pRoomId" />
+
+    <h2 id="currentRoom"></h2>
+    <h4 id="currentRoomId"></h4>
+    <p id="personLeave"></p>
+    <p id="personJoin"></p>
+    <p id="lockRoomP"></p>
+
+    <div id="messages"></div>
+
+    <div><ul id="rooms"></ul></div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+      var previousRoom;
+      const socket = io();
+
+      socket.on("joinedRoom", (data) => {
+        console.log("roomId", data);
+      });
+
+      socket.on("lockRoomError", (data) => {
+        alert(data);
+      });
+
+      socket.on("roomLocked", (data) => {
+        console.log("roomLocked", data);
+        document.getElementById(
+          "lockRoomP"
+        ).textContent = `Room ${data.roomId} is locked.`;
+      });
+
+      document
+        .getElementById("lockRoom")
+        .addEventListener("click", async (e) => {
+          const id = document.getElementById("currentRoomId").textContent;
+          const userId = document.getElementById("userId").value;
+          const roleId = document.getElementById("roleId").value;
+          console.log("here", id);
+
+          socket.emit("lockRoom", {
+            userId: Number(userId),
+            roleId: Number(roleId),
+            roomId: Number(id),
+          });
+        });
+
+      document
+        .getElementById("getRoom")
+        .addEventListener("click", async (e) => {
+          let data = {
+            subCategoryId: 3,
+          };
+          const options = {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(data),
+          };
+
+          const response = await fetch(`/api/getThreadById`, options);
+
+          if (!response.ok) {
+            console.error("Error fetching thread:", response.statusText);
+            return;
+          }
+          const threadData = await response.json();
+          // Display the retrieved thread data in your application UI
+          console.log("Thread data:", threadData);
+          const roomList = document.getElementById("rooms");
+          roomList.innerHTML = "";
+
+          threadData.response.rows.forEach((item) => {
+            const li = document.createElement("li");
+            li.textContent = item.title;
+            li.onclick = () => joinRoom(item);
+            roomList.appendChild(li);
+          });
+        });
+
+      // **************** join Room ***************
+      function joinRoom(data) {
+        const userId = document.getElementById("userId").value;
+        const userName = document.getElementById("userName").value;
+
+        // socket.emit("leaveRoom", {
+        //   id: previousRoom,
+        //   userId: userId,
+        //   userName: userName,
+        // });
+
+        socket.emit("joinRoom", {
+          id: data.id, //roomId
+          userId: Number(userId),
+          userName: userName,
+        });
+
+        document.getElementById("currentRoom").textContent = `${data.title}`;
+        document.getElementById("currentRoomId").textContent = `${data.id}`;
+        previousRoom = data.id;
+      }
+
+      socket.on("joinRoomError", (data) => {
+        alert(data);
+      });
+
+      socket.on("userJoined", (data) => {
+        document.getElementById(
+          "personJoin"
+        ).textContent = `${data.userId}-${data.userName} join group`;
+      });
+
+      // ---------------------------------------------------------------
+
+      //******************** Show all Message *******************
+      socket.on("initialMessages", (data) => {
+        const messagesList = document.getElementById("messages");
+        data.forEach((message) => {
+          const formattedDate = new Date(message.createdAt).toLocaleString(); // Example formatting
+
+          const li = document.createElement("li");
+          li.classList.add("message"); // Add a CSS class for styling
+
+          const spanDate = document.createElement("span");
+          spanDate.classList.add("message-date"); // CSS class for date
+          spanDate.textContent = formattedDate;
+          li.appendChild(spanDate);
+
+          const spanUser = document.createElement("span");
+          spanUser.classList.add("message-user"); // CSS class for user
+          spanUser.textContent = "-- " + message.userId; // You might want to use username instead
+          li.appendChild(spanUser);
+
+          const spanMessage = document.createElement("span");
+          spanMessage.classList.add("message-content"); // CSS class for message
+          spanMessage.textContent = "--- " + message.message;
+          li.appendChild(spanMessage);
+
+          messagesList.appendChild(li);
+        });
+      });
+
+      //----------------------------------
+
+      // ****************  send Message ******************
+      const submitBtn = document.getElementById("submitBtn");
+
+      submitBtn.addEventListener("click", (e) => {
+        const message = document.getElementById("message").value;
+        console.log(message);
+        const roomId = document.getElementById("currentRoomId").textContent;
+        const userId = document.getElementById("userId").value;
+        const roleId = document.getElementById("roleId").value;
+        let data = {
+          userId: Number(userId),
+          message: message,
+          roomId: Number(roomId),
+          roleId: Number(roleId),
+        };
+        socket.emit("sendMessage", data);
+      });
+
+      socket.on("message", (data) => {
+        console.log("in message action", data);
+        const messagesList = document.getElementById("messages");
+        const li = document.createElement("li");
+        li.textContent = `${data.timeStamp} - ${data.roomName}: ${data.message}`;
+        messagesList.appendChild(li);
+      });
+
+      socket.on("sendMessageError", (data) => {
+        console.log("sendMessageError", data);
+        alert(data);
+      });
+
+      // -------------------------------------------------------
+
+      //***************** Leave Room ***********************
+
+      socket.on("userLeave", (data) => {
+        document.getElementById(
+          "personLeave"
+        ).textContent = `${data.userId}-${data.userName} leave group`;
+      });
+
+      socket.on("leaveRoomError", (data) => {
+        console.log("leaveRoomError", data);
+        alert(data);
+      });
+
+      // ----------------------------------------------
+
+      // ***************** unlock Room ***************************
+
+      document.getElementById("unlockRoom").addEventListener("click", (e) => {
+        const id = document.getElementById("currentRoomId").textContent;
+        const userId = document.getElementById("userId").value;
+        const roleId = document.getElementById("roleId").value;
+        socket.emit("unLockRoom", {
+          roomId: Number(id),
+          userId: Number(userId),
+          roleId: Number(roleId),
+        });
+      });
+
+      socket.on("RoomUnlocked", (data) => {
+        console.log("RoomUnlocked", data);
+        document.getElementById(
+          "lockRoomP"
+        ).textContent = `Room ${data.roomId} is unlocked.`;
+      });
+
+      socket.on("unLockRoomError", (data) => {
+        alert(data);
+      });
+      // ------------------------------------------
+
+      // -_-_-__-----______-------__ Private Messages ---____----____------
+
+      // ********** private user joined ***********
+
+      document
+        .getElementById("privateRoom")
+        .addEventListener("click", async (e) => {
+          const userId = document.getElementById("userId").value;
+          const toUserId = document.getElementById("toUserId").value;
+          const roleId = document.getElementById("roleId").value;
+          const toRoleId = document.getElementById("toRoleId").value;
+          // const roomid = document.getElementById("pRoomId").value;
+
+          socket.emit("isP_RoomExist", {
+            userId: Number(userId),
+            toUserId: Number(toUserId),
+            roleId: Number(roleId),
+            toRoleId: Number(toRoleId),
+          });
+        });
+
+      socket.on("privateUserJoined", (data) => {
+        document.getElementById(
+          "personJoin"
+        ).textContent = `${data.userId} join group`;
+      });
+
+      socket.on("joinP_RoomError", (data) => {
+        alert(data);
+      });
+
+      //---------------------
+
+      // ************************** Send Private Message **************
+
+      const submitPBtn = document.getElementById("submitPBtn");
+
+      submitPBtn.addEventListener("click", (e) => {
+        const message = document.getElementById("message").value;
+        const userId = document.getElementById("userId").value;
+        const roleId = document.getElementById("roleId").value;
+        const toUserId = document.getElementById("toUserId").value;
+        const toRoleId = document.getElementById("toRoleId").value;
+        const pRoomId = document.getElementById("pRoomId").value;
+        console.log(message);
+        let data = {
+          userId: Number(userId),
+          roleId: Number(roleId),
+          toUserId: Number(toUserId),
+          toRoleId: Number(toRoleId),
+          roomId: pRoomId ? Number(pRoomId) : null,
+          message: message,
+        };
+        socket.emit("sendPMessage", data);
+      });
+
+      socket.on("P_Message", (data) => {
+        console.log("in Private message action", data);
+        const messagesList = document.getElementById("messages");
+        const li = document.createElement("li");
+        li.textContent = `${data.timeStamp} - ${data.roomName}: ${data.message}`;
+        messagesList.appendChild(li);
+      });
+
+      socket.on("sendPMessageError", (data) => {
+        console.log("sendMessageError", data);
+        alert(data);
+      });
+
+      // --------------------------------------------
+    </script>
+  </body>
+</html>

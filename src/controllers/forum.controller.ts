@@ -1,0 +1,357 @@
+import { sequelize } from "@src/config/database";
+import { ForumService } from "@src/services/forum.service";
+import {
+  createCategorySchema,
+  createDicsussionSchema,
+  createSubCategorySchema,
+  deleteThreadSchema,
+  getAllPrivateThreadsSchema,
+  getForumSubCategory,
+  getThreadByIdSchema,
+  getUserDiscussionSchema,
+  readMessageSchema,
+  reportSchema,
+  updateCategorySchema,
+} from "@src/shared/common/validators/forum.validator";
+import {
+  defaultSchema,
+  profileDefaultSchema,
+  userDefaultSchema,
+} from "@src/shared/common/validators/users.validators";
+import { Request, Response } from "express";
+
+export class ForumController {
+  /**
+   * @param __service
+   */
+
+  public constructor(public __service: ForumService) { }
+  /**
+   *
+   * @param req
+   * @param res
+   * @param next
+   */
+
+  public createCategory = async (req: Request, res: Response) => {
+    try {
+      let message = "Category created successfully.";
+      const { body } = req;
+      const data = await createCategorySchema.validateAsync(body);
+      const response: any = await this.__service.createCategory(data);
+
+      res.status(200).json({
+        statusCode: 200,
+        message,
+        response,
+      });
+    } catch (error: any) {
+      res.status(403).send({
+        statusCode: 403,
+        message: error.message,
+      });
+    }
+  };
+
+  public createSubCategory = async (req: Request, res: Response) => {
+    try {
+      let message = "SubCategory created successfully.";
+      const { body } = req;
+      const data = await createSubCategorySchema.validateAsync(body);
+      const response: any = await this.__service.createSubCategory(data);
+
+      res.status(200).json({
+        statusCode: 200,
+        message,
+        response,
+      });
+    } catch (error: any) {
+      res.status(403).send({
+        statusCode: 403,
+        message: error.message,
+      });
+    }
+  };
+
+  public getForumCategoryList = async (req: Request, res: Response) => {
+    try {
+      let message = "SubCategory created successfully.";
+      const response: any = await this.__service.getForumCategoryList();
+
+      res.status(200).json({
+        statusCode: 200,
+        message,
+        response,
+      });
+    } catch (error: any) {
+      res.status(403).send({
+        statusCode: 403,
+        message: error.message,
+      });
+    }
+  };
+
+  public createDiscussion = async (req: Request, res: Response) => {
+    try {
+      const transaction = await sequelize.transaction();
+      try {
+        const { body } = req;
+
+        let message = "Thread created successfully.";
+
+        const data = await createDicsussionSchema.validateAsync(body);
+
+        const response: any = await this.__service.createDiscussion(
+          data,
+          transaction
+        );
+
+        await transaction.commit();
+
+        res.status(200).json({
+          statusCode: 200,
+          message,
+          response,
+        });
+      } catch (error: any) {
+        if (transaction) {
+          transaction.rollback();
+        }
+        if (error.message == "You are not allowed to create threads.") {
+          res.status(401).send({
+            statusCode: 401,
+            message: error.message,
+          });
+        } else {
+          res.status(403).send({
+            statusCode: 403,
+            message: error.message,
+          });
+        }
+
+      }
+    } catch (error: any) {
+      console.log(error);
+      res.status(403).send({
+        statusCode: 403,
+        message: error?.message,
+      });
+    }
+  };
+
+  public getThreadById = async (req: Request, res: Response) => {
+    try {
+      let message = "Thread fetched successfully.";
+      const { body } = req;
+      // const data = await getThreadByIdSchema.validateAsync(body);
+      const response: any = await this.__service.getThreadById(body);
+
+      res.status(200).json({
+        statusCode: 200,
+        message,
+        response,
+      });
+    } catch (error: any) {
+      res.status(403).send({
+        statusCode: 403,
+        message: error.message,
+      });
+    }
+  };
+
+  public getAllPrivateThreads = async (req: Request, res: Response) => {
+    try {
+      let message = "Private threads fetched successfully.";
+      const { body } = req;
+      const data = await getAllPrivateThreadsSchema.validateAsync(body);
+      const response: any = await this.__service.getAllPrivateThreads(data);
+
+      res.status(200).json({
+        statusCode: 200,
+        message,
+        response,
+      });
+    } catch (error: any) {
+      res.status(403).send({
+        statusCode: 403,
+        message: error.message,
+      });
+    }
+  };
+
+  public deleteThread = async (req: Request, res: Response) => {
+    try {
+      const transaction = await sequelize.transaction();
+      try {
+        const { body } = req;
+
+        let message = "Thread deleted successfully.";
+
+        const data = await deleteThreadSchema.validateAsync(body);
+
+        const response: any = await this.__service.deleteThread(
+          data,
+          transaction
+        );
+
+        await transaction.commit();
+
+        res.status(200).json({
+          statusCode: 200,
+          message,
+          response,
+        });
+      } catch (error: any) {
+        if (transaction) {
+          transaction.rollback();
+        }
+        res.status(403).send({
+          statusCode: 403,
+          message: error.message,
+        });
+      }
+    } catch (error: any) {
+      console.log(error);
+      res.status(403).send({
+        statusCode: 403,
+        message: error?.message,
+      });
+    }
+  };
+
+  public readMessage = async (req: Request, res: Response) => {
+    try {
+      let message = "data read successfully.";
+      const { body } = req;
+      const data = await readMessageSchema.validateAsync(body);
+      const response: any = await this.__service.readMessage(data);
+
+      res.status(200).json({
+        statusCode: 200,
+        message,
+        response,
+      });
+    } catch (error: any) {
+      res.status(403).send({
+        statusCode: 403,
+        message: error.message,
+      });
+    }
+  };
+
+  public getUserDiscussion = async (req: Request, res: Response) => {
+    try {
+      let message = "data fetched successfully.";
+      const { body } = req;
+      const data = await getUserDiscussionSchema.validateAsync(body);
+      const response: any = await this.__service.getUserDiscussion(data);
+
+      res.status(200).json({
+        statusCode: 200,
+        message,
+        response,
+      });
+    } catch (error: any) {
+      res.status(403).send({
+        statusCode: 403,
+        message: error.message,
+      });
+    }
+  };
+
+  public getForumMainCategory = async (req: Request, res: Response) => {
+    try {
+      let message = "Data fetched successfully.";
+      const { query } = req;
+      const response: any = await this.__service.getForumMainCategory();
+
+      res.status(200).json({
+        statusCode: 200,
+        message,
+        response,
+      });
+    } catch (error: any) {
+      res.status(403).send({
+        statusCode: 403,
+        message: error.message,
+      });
+    }
+  };
+
+  public getForumSubCategory = async (req: Request, res: Response) => {
+    try {
+      let message = "data fetched successfully.";
+      const { query } = req;
+      const data = await getForumSubCategory.validateAsync(query);
+      const response: any = await this.__service.getForumSubCategory(data);
+
+      res.status(200).json({
+        statusCode: 200,
+        message,
+        response,
+      });
+    } catch (error: any) {
+      res.status(403).send({
+        statusCode: 403,
+        message: error.message,
+      });
+    }
+  };
+
+  public updateCategory = async (req: Request, res: Response) => {
+    try {
+      let message = "data updated successfully.";
+      const { body } = req;
+      const data = await updateCategorySchema.validateAsync(body);
+      const response: any = await this.__service.updateCategory(data);
+
+      res.status(200).json({
+        statusCode: 200,
+        message,
+        response,
+      });
+    } catch (error: any) {
+      res.status(403).send({
+        statusCode: 403,
+        message: error.message,
+      });
+    }
+  };
+
+  public report = async (req: Request, res: Response) => {
+    try {
+      const transaction = await sequelize.transaction();
+      try {
+        const { body } = req;
+
+        let message = "Successfully Reported.";
+
+        const data = await reportSchema.validateAsync(body);
+
+        const response: any = await this.__service.report(data, transaction);
+
+        await transaction.commit();
+
+        res.status(200).json({
+          statusCode: 200,
+          message,
+          response,
+        });
+      } catch (error: any) {
+        if (transaction) {
+          transaction.rollback();
+        }
+        res.status(403).send({
+          statusCode: 403,
+          message: error.message,
+        });
+      }
+    } catch (error: any) {
+      console.log(error);
+      res.status(403).send({
+        statusCode: 403,
+        message: error?.message,
+      });
+    }
+  };
+}

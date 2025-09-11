@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bossie Profile Update</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #F9F9FB;
+            margin: 0;
+            padding: 0;
+            color: #333;
+        }
+
+        .email-container {
+            max-width: 600px;
+            margin: 20px auto;
+            background-color: #fff;
+            border-radius: 12px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            padding: 25px;
+        }
+
+        .header {
+            text-align: center;
+            padding: 15px 0;
+        }
+
+        .header img {
+            max-width: 150px;
+        }
+
+        .content {
+            padding: 20px;
+            text-align: center;
+        }
+
+        .content h1 {
+            font-size: 22px;
+            color: #5A4A61;
+            margin-bottom: 10px;
+        }
+
+        .content p {
+            font-size: 16px;
+            line-height: 1.6;
+            margin-bottom: 15px;
+            color: #444;
+        }
+
+        .reason {
+            font-weight: bold;
+            color: #D9534F;
+        }
+
+        .otp {
+            font-size: 28px;
+            font-weight: bold;
+            color: #5A4A61;
+            background: #F3F3F7;
+            padding: 10px 15px;
+            display: inline-block;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+
+        .footer {
+            background-color: #F3F3F7;
+            padding: 12px;
+            text-align: center;
+            font-size: 14px;
+            color: #777;
+            border-radius: 12px 12px 12px 12px;
+        }
+
+        .footer a {
+            color: #5A4A61;
+            text-decoration: none;
+            font-weight: bold;
+        }
+
+        @media (max-width: 600px) {
+            .content h1 {
+                font-size: 20px;
+            }
+
+            .content p {
+                font-size: 14px;
+            }
+            .logo-row {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 10px;
+            }
+
+            .logo-row td {
+                display: block;
+                text-align: center;
+                width: 100% !important;
+            }
+
+            .logo-row img {
+                margin: 0 auto;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="email-container">
+        <!-- Header Section -->
+        <div class="header">
+            <img src="https://bossiebucket.s3.eu-north-1.amazonaws.com/1741297913827-bossie.png" alt="Bossie Logo">
+        </div>
+
+        <!-- Content Section -->
+        <div class="content">
+            <h1>✅ Activeer nu je Bossie-account</h1>
+            <p>Hallo {{username}},</p>
+            <p>Bedankt voor het kiezen van Bossie. Gebruik de volgende OTP om je account te activeren. De OTP is vijf
+                minuten geldig. Deel deze code met niemand, inclusief medewerkers van Bossie.</p>
+            <div class="otp">{{otp}}</div>
+            <p>Als je niet verder kunt of vragen hebt neem dan gerust contact met ons op – we helpen je graag! 🙌</p>
+        </div>
+        <!-- App Store & Logo Section -->
+        <table width="100%" align="center" border="0" cellspacing="0" cellpadding="0" style="padding-bottom: 10px;">
+            <tbody>
+                <tr>
+                    <td align="center">
+                        <table width="300" align="center" cellpadding="0" cellspacing="0" border="0">
+                            <tbody>
+                                <tr class="logo-row">
+                                    <td align="center">
+                                        <a href="#" target="_blank">
+                                            <img src="https://bossiebucket.s3.amazonaws.com/1741778865215-download%20on%20appstore.png"
+                                                width="140" alt="Download on Apple">
+                                        </a>
+                                    </td>
+                                    <td align="center">
+                                        <a href="#" target="_blank">
+                                            <img src="https://bossiebucket.s3.amazonaws.com/1741297555483-logo.png"
+                                                width="60" alt="Bossie Logo"
+                                                style="border-radius: 12px; margin: 0 10px;">
+                                        </a>
+                                    </td>
+                                    <td align="center">
+                                        <a href="#" target="_blank">
+                                            <img src="https://www.lagrandereserve.club/pictures/google_en.png"
+                                                width="140" alt="Download on Google">
+                                        </a>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+        <!-- Footer Section -->
+        <div class="footer">
+            <p>&copy; 2025 Bossie. Alle rechten voorbehouden.</p>
+            <p><a href="mailto:support@bossie.app">📞 Contacteer Support</a></p>
+        </div>
+    </div>
+</body>
+
+</html>
