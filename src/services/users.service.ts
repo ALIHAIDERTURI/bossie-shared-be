@@ -2429,7 +2429,10 @@ export class UserService {
     }
 
     await users.update(
-      { appealMessage: appealMessage },
+      { 
+        appealMessage: appealMessage,
+        hasAppeal: true
+      },
       { where: { id: userId } }
     );
 

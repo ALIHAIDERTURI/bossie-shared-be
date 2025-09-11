@@ -316,12 +316,12 @@ export class AdminController {
     }
   };
 
-  public getAllCompanyInfo = async (req: Request, res: Response) => {
+  public getAllCompanies = async (req: Request, res: Response) => {
     try {
       let message = "Companies fetched successfully.";
       const { query } = req;
-      const data = await getAllCompanyInfoSchema.validateAsync(query);
-      const response: any = await this.__service.getAllCompanyInfo(data);
+      const data = await getAllUsersSchema.validateAsync(query); // Reusing the same schema as it has the same structure
+      const response: any = await this.__service.getAllCompanies(data);
 
       res.status(200).json({
         statusCode: 200,
@@ -335,6 +335,26 @@ export class AdminController {
       });
     }
   };
+
+  // public getAllCompanyInfo = async (req: Request, res: Response) => {
+  //   try {
+  //     let message = "Companies fetched successfully.";
+  //     const { query } = req;
+  //     const data = await getAllCompanyInfoSchema.validateAsync(query);
+  //     const response: any = await this.__service.getAllCompanyInfo(data);
+
+  //     res.status(200).json({
+  //       statusCode: 200,
+  //       message,
+  //       response,
+  //     });
+  //   } catch (error: any) {
+  //     res.status(403).send({
+  //       statusCode: 403,
+  //       message: error.message,
+  //     });
+  //   }
+  // };
 
   public getUserLogInfo = async (req: Request, res: Response) => {
     try {
@@ -959,12 +979,52 @@ export class AdminController {
     }
   };
 
+  public getReportedCompaniesList = async (req: Request, res: Response) => {
+    try {
+      let message = "Reported companies list fetched successfully.";
+      const { query } = req;
+      const data = await getReportedUsersSchema.validateAsync(query); // Reusing the same schema
+      const response: any = await this.__service.getReportedCompaniesList(data);
+
+      res.status(200).json({
+        statusCode: 200,
+        message,
+        response,
+      });
+    } catch (error: any) {
+      res.status(403).send({
+        statusCode: 403,
+        message: error.message,
+      });
+    }
+  };
+
   public getReportedUserDetails = async (req: Request, res: Response) => {
     try {
       let message = "Reported user details fetched successfully.";
       const { params } = req;
       const data = { reportId: parseInt(params.reportId) };
       const response: any = await this.__service.getReportedUserDetails(data);
+
+      res.status(200).json({
+        statusCode: 200,
+        message,
+        response,
+      });
+    } catch (error: any) {
+      res.status(403).send({
+        statusCode: 403,
+        message: error.message,
+      });
+    }
+  };
+
+  public getReportedCompanyDetails = async (req: Request, res: Response) => {
+    try {
+      let message = "Reported company details fetched successfully.";
+      const { params } = req;
+      const data = { reportId: parseInt(params.reportId) };
+      const response: any = await this.__service.getReportedCompanyDetails(data);
 
       res.status(200).json({
         statusCode: 200,
@@ -999,6 +1059,26 @@ export class AdminController {
     }
   };
 
+  public getCompanyDetails = async (req: Request, res: Response) => {
+    try {
+      let message = "Company details fetched successfully.";
+      const { params } = req;
+      const data = { id: parseInt(params.id) };
+      const response: any = await this.__service.getCompanyDetails(data);
+
+      res.status(200).json({
+        statusCode: 200,
+        message,
+        response,
+      });
+    } catch (error: any) {
+      res.status(403).send({
+        statusCode: 403,
+        message: error.message,
+      });
+    }
+  };
+
   public getUserThreads = async (req: Request, res: Response) => {
     try {
       let message = "User threads fetched successfully.";
@@ -1010,6 +1090,31 @@ export class AdminController {
         offset: parseInt(offset as string) 
       };
       const response: any = await this.__service.getUserThreads(data);
+
+      res.status(200).json({
+        statusCode: 200,
+        message,
+        response,
+      });
+    } catch (error: any) {
+      res.status(403).send({
+        statusCode: 403,
+        message: error.message,
+      });
+    }
+  };
+
+  public getCompanyThreads = async (req: Request, res: Response) => {
+    try {
+      let message = "Company threads fetched successfully.";
+      const { companyId } = req.params;
+      const { limit = 10, offset = 0 } = req.query;
+      const data = { 
+        companyId: parseInt(companyId), 
+        limit: parseInt(limit as string), 
+        offset: parseInt(offset as string) 
+      };
+      const response: any = await this.__service.getCompanyThreads(data);
 
       res.status(200).json({
         statusCode: 200,
@@ -1059,11 +1164,46 @@ export class AdminController {
     }
   };
 
+  public approveRejectCompany = async (req: Request, res: Response) => {
+    try {
+      let message = "Company request processed successfully.";
+      const { companyId } = req.params;
+      const { status, rejectionReason, customLog, adminId } = req.body;
+
+      if (!adminId) {
+        return res.status(401).json({
+          statusCode: 401,
+          message: "Admin ID is required",
+        });
+      }
+
+      const data = { 
+        companyId: parseInt(companyId), 
+        status: parseInt(status),
+        adminId: adminId,
+        rejectionReason: rejectionReason || null,
+        customLog: customLog || null
+      };
+      const response: any = await this.__service.approveRejectCompany(data);
+
+      res.status(200).json({
+        statusCode: 200,
+        message,
+        response,
+      });
+    } catch (error: any) {
+      res.status(403).send({
+        statusCode: 403,
+        message: error.message,
+      });
+    }
+  };
+
   public reviewAppeal = async (req: Request, res: Response) => {
     try {
       let message = "Appeal reviewed successfully.";
       const { userId } = req.params;
-      const { status, rejectionReason, adminId } = req.body;
+      const { status, rejectionReason, adminId, roleId } = req.body;
 
       if (!adminId) {
         return res.status(401).json({
@@ -1074,6 +1214,7 @@ export class AdminController {
 
       const data = { 
         userId: parseInt(userId),
+        roleId: roleId || null,
         status: status,
         adminId: adminId,
         rejectionReason: rejectionReason || null
@@ -1093,16 +1234,23 @@ export class AdminController {
     }
   };
 
+
   public markReportAsResolved = async (req: Request, res: Response) => {
     try {
-      let message = "Report marked as resolved successfully.";
-      const { params } = req;
+      const { params, body } = req;
+      const { reportedRoleId } = body;
       const data = await markReportAsResolvedSchema.validateAsync(params);
+      
+      // Add reportedRoleId to data if provided
+      if (reportedRoleId) {
+        data.reportedRoleId = reportedRoleId;
+      }
+      
       const response: any = await this.__service.markReportAsResolved(data);
 
       res.status(200).json({
         statusCode: 200,
-        message,
+        message: response.message,
         response,
       });
     } catch (error: any) {
@@ -1112,6 +1260,7 @@ export class AdminController {
       });
     }
   };
+
 
   public calculateUserToxicityScore = async (req: Request, res: Response) => {
     try {
@@ -1277,6 +1426,31 @@ export class AdminController {
       return res.status(200).json({
         statusCode: 200,
         message: "Users appeals fetched successfully.",
+        response,
+      });
+    } catch (error: any) {
+      return res.status(403).json({
+        statusCode: 403,
+        message: error.message,
+      });
+    }
+  };
+
+  public getCompaniesAppeals = async (req: Request, res: Response) => {
+    try {
+      const { error, value } = getUsersAppealsSchema.validate(req.query); // Reusing the same schema
+      if (error) {
+        return res.status(400).json({
+          statusCode: 400,
+          message: error.details[0].message,
+        });
+      }
+
+      const response = await this.__service.getCompaniesAppeals(value);
+
+      return res.status(200).json({
+        statusCode: 200,
+        message: "Companies appeals fetched successfully.",
         response,
       });
     } catch (error: any) {

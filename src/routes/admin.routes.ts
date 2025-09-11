@@ -53,6 +53,10 @@ adminRouter.get("/getAllUsers", (...args: [Request, Response]) =>
   adminControler.getAllUsers(...args)
 );
 
+adminRouter.get("/getAllCompanies", (...args: [Request, Response]) =>
+  adminControler.getAllCompanies(...args)
+);
+
 adminRouter.get("/getUserInfoById", (...args: [Request, Response]) =>
   adminControler.getUserInfoById(...args)
 );
@@ -69,9 +73,9 @@ adminRouter.get("/getUserLogInfo", (...args: [Request, Response]) =>
   adminControler.getUserLogInfo(...args)
 );
 
-adminRouter.get("/getAllCompanyInfo", (...args: [Request, Response]) =>
-  adminControler.getAllCompanyInfo(...args)
-);
+// adminRouter.get("/getAllCompanyInfo", (...args: [Request, Response]) =>
+//   adminControler.getAllCompanyInfo(...args)
+// );
 
 adminRouter.get("/getCompanyInfoById", (...args: [Request, Response]) =>
   adminControler.getCompanyInfoById(...args)
@@ -145,20 +149,40 @@ adminRouter.get("/getReportedUsersList", (...args: [Request, Response]) =>
   adminControler.getReportedUsersList(...args)
 );
 
+adminRouter.get("/getReportedCompaniesList", (...args: [Request, Response]) =>
+  adminControler.getReportedCompaniesList(...args)
+);
+
 adminRouter.get("/getReportedUserDetails/:reportId", (...args: [Request, Response]) =>
   adminControler.getReportedUserDetails(...args)
+);
+
+adminRouter.get("/getReportedCompanyDetails/:reportId", (...args: [Request, Response]) =>
+  adminControler.getReportedCompanyDetails(...args)
 );
 
 adminRouter.get("/getUserDetails/:id", (...args: [Request, Response]) =>
   adminControler.getUserDetails(...args)
 );
 
+adminRouter.get("/getCompanyDetails/:id", (...args: [Request, Response]) =>
+  adminControler.getCompanyDetails(...args)
+);
+
 adminRouter.get("/getUserThreads/:userId", (...args: [Request, Response]) =>
   adminControler.getUserThreads(...args)
 );
 
+adminRouter.get("/getCompanyThreads/:companyId", (...args: [Request, Response]) =>
+  adminControler.getCompanyThreads(...args)
+);
+
 adminRouter.post("/approveRejectUser/:userId", (...args: [Request, Response]) =>
   adminControler.approveRejectUser(...args)
+);
+
+adminRouter.post("/approveRejectCompany/:companyId", (...args: [Request, Response]) =>
+  adminControler.approveRejectCompany(...args)
 );
 
 adminRouter.post("/reviewAppeal/:userId", (...args: [Request, Response]) =>
@@ -195,4 +219,8 @@ adminRouter.get("/getModeratorPerformanceStats/:moderatorId", (...args: [Request
 
 adminRouter.get("/getUsersAppeals", (...args: [Request, Response]) =>
   adminControler.getUsersAppeals(...args)
+);
+
+adminRouter.get("/getCompaniesAppeals", (...args: [Request, Response]) =>
+  adminControler.getCompaniesAppeals(...args)
 );

@@ -40,6 +40,7 @@ export interface userI {
   rejectionReason?: string;
   fcmToken?: string;
   appealMessage?: string;
+  hasAppeal?: boolean;
   createdAt?: Date;
   updatedAt?: Date;
   deletedAt?: Date | null;
@@ -168,6 +169,12 @@ export class users extends Model<userI> {
 
   @Column(DataType.TEXT('long'))
   public appealMessage: string;
+
+  @Column({
+    type: DataType.BOOLEAN,
+    defaultValue: false,
+  })
+  public hasAppeal: boolean;
 
   @ForeignKey((): typeof admin => admin)
   @Column(DataType.INTEGER)

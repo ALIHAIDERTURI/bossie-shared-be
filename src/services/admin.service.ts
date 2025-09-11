@@ -684,9 +684,7 @@ export class AdminService {
             break;
           case "unVerified":
             typeConditions.push({
-              "$roleData.isApproved$": {
-                [Op.or]: [false, null],
-              },
+              "profileStatus": 2,
             });
             break;
           case "mute":
@@ -952,6 +950,311 @@ export class AdminService {
     return res;
   };
 
+  public getAllCompanies = async (data: any): Promise<any> => {
+    const { limit, offset, filters } = data;
+
+    if (filters?.industryId && typeof filters.industryId === 'string') {
+      try {
+        filters.industryId = JSON.parse(filters.industryId);
+      } catch (e) {
+        filters.industryId = [];
+      }
+    }
+
+    let whereClause: any = [];
+    if (filters?.type) {
+      const typeFilters = typeof filters.type === 'string' ? filters.type.split(',') : [filters.type];
+      const typeConditions: any[] = [];
+      const validTypes = ['verified', 'unVerified', 'mute', 'suspend', 'approved', 'muted'];
+
+      const invalidTypes = typeFilters.filter((type: string) => {
+        const trimmedType = type.trim();
+        return !validTypes.includes(trimmedType);
+      });
+
+      if (invalidTypes.length > 0) {
+        throw new Error(`Invalid filter type(s): ${invalidTypes.join(', ')}. Valid types are: ${validTypes.join(', ')}`);
+      }
+
+      typeFilters.forEach((type: string) => {
+        const trimmedType = type.trim();
+
+        switch (trimmedType) {
+          case "verified":
+            typeConditions.push({ "$roleData.isApproved$": true });
+            break;
+          case "unVerified":
+            typeConditions.push({
+              "profileStatus": 2,
+            });
+            break;
+          case "mute":
+            typeConditions.push({
+              id: {
+                [Op.in]: Sequelize.literal(
+                  `(SELECT DISTINCT ul1.userId 
+                   FROM userLog ul1 
+                   WHERE ul1.isMuted = true 
+                   AND ul1.deletedAt IS NULL
+                   AND NOT EXISTS (
+                     SELECT 1 FROM userLog ul2 
+                     WHERE ul2.userId = ul1.userId 
+                     AND ul2.isMuted = false 
+                     AND ul2.createdAt > ul1.createdAt 
+                     AND ul2.deletedAt IS NULL
+                   ))`
+                )
+              }
+            });
+            break;
+          case "suspend":
+            typeConditions.push({
+              id: {
+                [Op.in]: Sequelize.literal(
+                  `(SELECT DISTINCT ul1.userId 
+                   FROM userLog ul1 
+                   WHERE ul1.isSuspend = true 
+                   AND ul1.deletedAt IS NULL
+                   AND NOT EXISTS (
+                     SELECT 1 FROM userLog ul2 
+                     WHERE ul2.userId = ul1.userId 
+                     AND ul2.isSuspend = false 
+                     AND ul2.createdAt > ul1.createdAt 
+                     AND ul2.deletedAt IS NULL
+                   ))`
+                )
+              }
+            });
+            break;
+          case "approved":
+            typeConditions.push({
+              "$roleData.isApproved$": true,
+            });
+            break;
+          case "muted":
+            typeConditions.push({
+              id: {
+                [Op.in]: Sequelize.literal(
+                  `(SELECT DISTINCT ul1.userId 
+                   FROM userLog ul1 
+                   WHERE ul1.isMuted = true 
+                   AND ul1.deletedAt IS NULL
+                   AND NOT EXISTS (
+                     SELECT 1 FROM userLog ul2 
+                     WHERE ul2.userId = ul1.userId 
+                     AND ul2.isMuted = false 
+                     AND ul2.createdAt > ul1.createdAt 
+                     AND ul2.deletedAt IS NULL
+                   ))`
+                )
+              }
+            });
+            break;
+        }
+      });
+      if (typeConditions.length > 0) {
+        if (typeConditions.length === 1) {
+          Object.assign(whereClause, typeConditions[0]);
+        } else {
+          whereClause[Op.and] = typeConditions;
+        }
+      }
+    }
+
+    if (filters?.search) {
+      const searchTerm = filters.search.trim();
+      const searchConditions = [
+        { name: { [Op.like]: `%${searchTerm}%` } },
+        { email: { [Op.like]: `%${searchTerm}%` } },
+        { phone: { [Op.like]: `%${searchTerm}%` } },
+        Sequelize.literal(`EXISTS (SELECT 1 FROM roleData WHERE roleData.userId = users.id AND (roleData.firstName LIKE '%${searchTerm}%' OR roleData.lastName LIKE '%${searchTerm}%' OR roleData.companyName LIKE '%${searchTerm}%' OR roleData.chamberCommerceNumber LIKE '%${searchTerm}%'))`)
+      ];
+
+      if (whereClause[Op.and] || whereClause[Op.or]) {
+        const existingConditions = whereClause[Op.and] || whereClause[Op.or];
+        whereClause[Op.and] = [
+          ...(Array.isArray(existingConditions) ? existingConditions : [existingConditions]),
+          { [Op.or]: searchConditions }
+        ];
+        delete whereClause[Op.or];
+      } else {
+        whereClause[Op.or] = searchConditions;
+      }
+    }
+
+    if (filters?.chatAvailability) {
+      const chatFilters = typeof filters.chatAvailability === 'string' ? filters.chatAvailability.split(',') : [filters.chatAvailability];
+      const chatConditions: any[] = [];
+      const validChatAvailability = ['available', 'unavailable'];
+
+      const invalidChatAvailability = chatFilters.filter((availability: string) => {
+        const trimmedAvailability = availability.trim();
+        return !validChatAvailability.includes(trimmedAvailability);
+      });
+
+      if (invalidChatAvailability.length > 0) {
+        throw new Error(`Invalid chat availability filter(s): ${invalidChatAvailability.join(', ')}. Valid options are: ${validChatAvailability.join(', ')}`);
+      }
+
+      chatFilters.forEach((availability: string) => {
+        const trimmedAvailability = availability.trim();
+
+        switch (trimmedAvailability) {
+          case "available":
+            chatConditions.push({ "$roleData.accountStatus$": 1 });
+            break;
+          case "unavailable":
+            chatConditions.push({
+              "$roleData.accountStatus$": {
+                [Op.or]: [0, null],
+              },
+            });
+            break;
+        }
+      });
+
+      if (chatConditions.length > 0) {
+        const chatFilter = chatConditions.length === 1 ? chatConditions[0] : { [Op.or]: chatConditions };
+
+        if (whereClause[Op.and] || whereClause[Op.or]) {
+          const existingConditions = whereClause[Op.and] || whereClause[Op.or];
+          whereClause[Op.and] = [
+            ...(Array.isArray(existingConditions) ? existingConditions : [existingConditions]),
+            chatFilter
+          ];
+          delete whereClause[Op.or];
+        } else {
+          Object.assign(whereClause, chatFilter);
+        }
+      }
+    }
+
+    if (filters?.industryId && filters.industryId.length > 0) {
+      const industryConditions = filters.industryId.map((id: number) =>
+          Sequelize.literal(
+            `JSON_CONTAINS(\`roleData\`.\`industryId\`, '${id}', '$')`
+          )
+      );
+
+      const industryFilter = industryConditions.length === 1
+        ? { "$roleData.industryId$": industryConditions[0] }
+        : { "$roleData.industryId$": { [Op.and]: industryConditions } };
+
+      if (whereClause[Op.and] || whereClause[Op.or]) {
+        const existingConditions = whereClause[Op.and] || whereClause[Op.or];
+        whereClause[Op.and] = [
+          ...(Array.isArray(existingConditions) ? existingConditions : [existingConditions]),
+          industryFilter
+        ];
+        delete whereClause[Op.or];
+      } else {
+        Object.assign(whereClause, industryFilter);
+      }
+    }
+
+    if (filters?.currentMonth === true) {
+      const currentDate = new Date();
+      const currentMonth = currentDate.getMonth() + 1;
+      const currentYear = currentDate.getFullYear();
+
+      const monthFilter = {
+        "$roleData.createdAt$": {
+        [Op.and]: [
+          Sequelize.literal(`MONTH(\`roleData\`.\`createdAt\`) = ${currentMonth}`),
+          Sequelize.literal(`YEAR(\`roleData\`.\`createdAt\`) = ${currentYear}`)
+        ]
+        }
+      };
+
+      if (whereClause[Op.and] || whereClause[Op.or]) {
+        const existingConditions = whereClause[Op.and] || whereClause[Op.or];
+        whereClause[Op.and] = [
+          ...(Array.isArray(existingConditions) ? existingConditions : [existingConditions]),
+          monthFilter
+        ];
+        delete whereClause[Op.or];
+      } else {
+        Object.assign(whereClause, monthFilter);
+      }
+    }
+    
+    const res: any = await users.findAndCountAll({
+      where: { roleId: 2, deletedAt: null, ...whereClause }, // Changed to roleId: 2 for companies
+      attributes: ["id", "roleId", "name", "email", "phone", "profileStatus"],
+      include: [
+        {
+          model: roleData,
+          attributes: [
+            "currentSituationId",
+            "accountStatus",
+            "firstName",
+            "lastName",
+            "profile",
+            "industryId",
+            "isApproved",
+            "mutedOn",
+            "suspendedOn",
+            "companyName", // Added company name
+            "chamberCommerceNumber", // Added chamber of commerce
+          ],
+          required:
+            filters?.type?.includes("verified") ||
+            filters?.type?.includes("unVerified") ||
+            filters?.type?.includes("approved") ||
+            filters?.industryId?.length > 0 ||
+            filters?.chatAvailability ||
+            filters?.currentMonth === true,
+        },
+        {
+          model: userLog,
+          attributes: [],
+          required: false,
+          as: "userLog",
+        },
+      ],
+      // order: [["createdAt", "DESC"]],
+      limit: limit,
+      offset: limit * offset,
+      distinct: true,
+    });
+    const enhancedRows = await Promise.all(
+      res.rows.map(async (user: any) => {
+        const warningCounts = await userLog.findAll({
+          where: { userId: user.id },
+          attributes: [
+            [Sequelize.fn('COUNT', Sequelize.literal('CASE WHEN isMuted = true THEN 1 END')), 'muteCount'],
+            [Sequelize.fn('COUNT', Sequelize.literal('CASE WHEN isSuspend = true THEN 1 END')), 'suspendCount']
+          ],
+          raw: true
+        });
+
+        const warnings: any = warningCounts[0] || {
+          muteCount: 0,
+          suspendCount: 0
+        };
+
+        const muteCount = parseInt(warnings.muteCount) || 0;
+        const suspendCount = parseInt(warnings.suspendCount) || 0;
+
+        return {
+          ...user.toJSON(),
+          profilePicture: user.roleData?.profile || null,
+          companyName: user.roleData?.companyName || null, // Added company name
+          chamberCommerceNumber: user.roleData?.chamberCommerceNumber || null, // Added chamber of commerce
+          warnings: {
+            total: muteCount + suspendCount,
+            mute: muteCount,
+            suspend: suspendCount
+          }
+        };
+      })
+    );
+
+    res.rows = enhancedRows.reverse();
+
+    return res;
+  };
+
   public getUserDetailsById = async (data: any): Promise<any> => {
     const { id } = data;  
     const userInfo = await users.findOne({
@@ -966,6 +1269,7 @@ export class AdminService {
         "rejectionReason",
         "emailVerified",
         "appealMessage",
+        "lastLogin",
         "createdAt",
         "updatedAt"
       ],
@@ -993,7 +1297,8 @@ export class AdminService {
             "isVideoSubmitted",
             "video",
             "title",
-            "companyName"
+            "companyName",
+            "hourlyRate"
           ],
           required: false
         },
@@ -1145,6 +1450,197 @@ export class AdminService {
         }
       },
       logs: userLogs
+    };
+  };
+
+  public getCompanyDetails = async (data: any): Promise<any> => {
+    const { id } = data;  
+    const companyInfo = await users.findOne({
+      where: { id: id, roleId: 2, deletedAt: null }, // Changed to roleId: 2 for companies
+      attributes: [
+        "id",
+        "roleId",
+        "name",
+        "email",
+        "phone",
+        "profileStatus",
+        "rejectionReason",
+        "emailVerified",
+        "appealMessage",
+        "createdAt",
+        "updatedAt"
+      ],
+      include: [
+        {
+          model: roleData,
+          as: "roleData",
+          attributes: [
+            "id",
+            "firstName",
+            "lastName",
+            "chamberCommerceNumber",
+            "currentSituationId",
+            "industryId",
+            "about",
+            "createdAt",
+            "profile",
+            "accountStatus",
+            "isVideoSubmitted",
+            "video",
+            "title",
+            "companyName",
+            "hourlyRate"
+          ],
+          required: false
+        },
+      ],
+    });
+
+    if (!companyInfo) {
+      throw new Error("Company not found");
+    }
+    const companyRoleData = companyInfo.roleData as any;
+    const field = "userId"; // Companies use userId field
+    const warningCounts = await userLog.findAll({
+      where: { [field]: id },
+      attributes: [
+        [Sequelize.fn('COUNT', Sequelize.literal('CASE WHEN isMuted = true THEN 1 END')), 'muteCount'],
+        [Sequelize.fn('COUNT', Sequelize.literal('CASE WHEN isSuspend = true THEN 1 END')), 'suspendCount']
+      ],
+      raw: true
+    });
+
+    const warnings: any = warningCounts[0] || {
+      muteCount: 0,
+      suspendCount: 0
+    };
+
+    const latestMute = await userLog.findOne({
+      where: { [field]: id, isMuted: true },
+      include: [
+        {
+          model: admin,
+          as: "mute",
+          attributes: ["id", "name", "adminRoleId"],
+          required: false
+        }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+
+    const latestSuspend = await userLog.findOne({
+      where: { [field]: id, isSuspend: true },
+      include: [
+        {
+          model: admin,
+          as: "suspend",
+          attributes: ["id", "name", "adminRoleId"],
+          required: false
+        }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+
+    const companyLogs = await this.getUserLogInfo({ userId: id, roleId: companyInfo.roleId });
+
+    let originalReason = null;
+    if (companyInfo.appealMessage) {
+      const isCurrentlySuspended = companyRoleData?.suspendedOn !== null;
+      const isCurrentlyMuted = companyRoleData?.mutedOn !== null;
+
+      if (isCurrentlySuspended) {
+        const originalSuspension = await userLog.findOne({
+          where: {
+            userId: id,
+            isSuspend: true,
+            deletedAt: null
+          },
+          attributes: ["suspendReason", "createdAt"],
+          order: [["createdAt", "DESC"]]
+        });
+        originalReason = originalSuspension?.suspendReason || null;
+      } else if (isCurrentlyMuted) {
+        const originalMute = await userLog.findOne({
+          where: {
+            userId: id,
+            isMuted: true,
+            deletedAt: null
+          },
+          attributes: ["muteReason", "createdAt"],
+          order: [["createdAt", "DESC"]]
+        });
+        originalReason = originalMute?.muteReason || null;
+      } else {
+        const latestSuspension = await userLog.findOne({
+          where: {
+            userId: id,
+            isSuspend: true,
+            deletedAt: null
+          },
+          attributes: ["suspendReason", "createdAt"],
+          order: [["createdAt", "DESC"]]
+        });
+
+        const latestMute = await userLog.findOne({
+          where: {
+            userId: id,
+            isMuted: true,
+            deletedAt: null
+          },
+          attributes: ["muteReason", "createdAt"],
+          order: [["createdAt", "DESC"]]
+        });
+
+        if (latestSuspension && latestMute) {
+          if (latestSuspension.createdAt > latestMute.createdAt) {
+            originalReason = latestSuspension.suspendReason;
+          } else {
+            originalReason = latestMute.muteReason;
+          }
+        } else if (latestSuspension) {
+          originalReason = latestSuspension.suspendReason;
+        } else if (latestMute) {
+          originalReason = latestMute.muteReason;
+        }
+      }
+      if (!originalReason) {
+        const anyRecentLog = await userLog.findOne({
+          where: {
+            userId: id,
+            deletedAt: null,
+            [Op.or]: [
+              { suspendReason: { [Op.ne]: "" } },
+              { muteReason: { [Op.ne]: "" } }
+            ]
+          },
+          attributes: ["suspendReason", "muteReason"],
+          order: [["createdAt", "DESC"]]
+        });
+        
+        if (anyRecentLog) {
+          originalReason = anyRecentLog.suspendReason || anyRecentLog.muteReason;
+        }
+      }
+    }
+
+    return {
+      ...companyInfo.toJSON(),
+      roleData: companyRoleData || null,
+      appeal: {
+        message: companyInfo.appealMessage || null,
+        originalReason: originalReason
+      },
+      warnings: {
+        muted: {
+          count: parseInt(warnings.muteCount) || 0,
+          admin: latestMute?.mute ? (latestMute.mute as any).toJSON() : null
+        },
+        suspended: {
+          count: parseInt(warnings.suspendCount) || 0,
+          admin: latestSuspend?.suspend ? (latestSuspend.suspend as any).toJSON() : null
+        }
+      },
+      logs: companyLogs
     };
   };
   public getUserInfoById = async (data: any): Promise<any> => {
@@ -3938,21 +4434,24 @@ export class AdminService {
         deletedAt: null,
       };
 
+      const statusArray = Array.isArray(status) ? status : (status ? [status] : []);
+      
+      // Build search conditions
+      const searchConditions: any[] = [];
       if (search && search.trim()) {
-        whereClause[Op.or] = [
+        searchConditions.push(
           { name: { [Op.like]: `%${search.trim()}%` } },
           { email: { [Op.like]: `%${search.trim()}%` } },
           { phone: { [Op.like]: `%${search.trim()}%` } },
           { "$roleData.firstName$": { [Op.like]: `%${search.trim()}%` } },
           { "$roleData.lastName$": { [Op.like]: `%${search.trim()}%` } },
-          { "$roleData.companyName$": { [Op.like]: `%${search.trim()}%` } },
-        ];
+          { "$roleData.companyName$": { [Op.like]: `%${search.trim()}%` } }
+        );
       }
-      const statusArray = Array.isArray(status) ? status : (status ? [status] : []);
       
+      // Build status conditions
+      const statusConditions: any[] = [];
       if (statusArray.length > 0) {
-        const statusConditions: any[] = [];
-        
         statusArray.forEach((statusType: string) => {
           switch (statusType.toLowerCase()) {
             case "active":
@@ -3981,17 +4480,26 @@ export class AdminService {
               break;
           }
         });
+      }
 
-        if (statusConditions.length > 0) {
-          whereClause[Op.or] = statusConditions;
-        }
+      // Combine search and status conditions
+      const combinedConditions: any[] = [];
+      if (searchConditions.length > 0) {
+        combinedConditions.push({ [Op.or]: searchConditions });
+      }
+      if (statusConditions.length > 0) {
+        combinedConditions.push({ [Op.or]: statusConditions });
+      }
+
+      if (combinedConditions.length > 0) {
+        whereClause[Op.and] = combinedConditions;
       }
 
       if (hasAppeal !== null) {
         if (hasAppeal === true) {
-          whereClause.appealMessage = { [Op.ne]: null };
+          whereClause.hasAppeal = true;
         } else if (hasAppeal === false) {
-          whereClause.appealMessage = null;
+          whereClause.hasAppeal = false;
         }
       }
       const includeArray: any[] = [
@@ -4012,7 +4520,8 @@ export class AdminService {
             "languageId",
             "chamberCommerceNumber",
             "title",
-            "currentSituationId"
+            "currentSituationId",
+            "accountStatus"
           ],
         },
       ];
@@ -4030,6 +4539,7 @@ export class AdminService {
           "phone",
           "email",
           "appealMessage",
+          "hasAppeal",
           "createdAt"
         ],
       });
@@ -4072,7 +4582,7 @@ export class AdminService {
               mute: muteCount,
               suspend: suspendCount,
             },
-            hasAppeal: !!user.appealMessage,
+            hasAppeal: user.hasAppeal,
             appealMessage: user.appealMessage,
             createdAt: user.createdAt,
             roleData: user.roleData || null,
@@ -4084,6 +4594,199 @@ export class AdminService {
 
       return {
         users: usersWithWarnings,
+        pagination: {
+          limit: parseInt(limit),
+          offset: parseInt(offset),
+          totalCount,
+          totalPages,
+          currentPage: Math.floor(offset / limit) + 1,
+        },
+      };
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  public getCompaniesAppeals = async (data: any) => {
+    try {
+      const {
+        limit = 10,
+        offset = 0,
+        search = "",
+        status = [],
+        hasAppeal = null,
+      } = data;
+
+      const whereClause: any = {
+        deletedAt: null,
+        roleId: 2, // Filter for companies only
+        hasAppeal: true, // Only companies with appeals
+      };
+
+      const statusArray = Array.isArray(status) ? status : (status ? [status] : []);
+      
+      // Build search conditions
+      const searchConditions: any[] = [];
+      if (search && search.trim()) {
+        searchConditions.push(
+          { name: { [Op.like]: `%${search.trim()}%` } },
+          { email: { [Op.like]: `%${search.trim()}%` } },
+          { phone: { [Op.like]: `%${search.trim()}%` } },
+          { "$roleData.firstName$": { [Op.like]: `%${search.trim()}%` } },
+          { "$roleData.lastName$": { [Op.like]: `%${search.trim()}%` } },
+          { "$roleData.companyName$": { [Op.like]: `%${search.trim()}%` } },
+          { "$roleData.chamberCommerceNumber$": { [Op.like]: `%${search.trim()}%` } }
+        );
+      }
+      
+      // Build status conditions
+      const statusConditions: any[] = [];
+      if (statusArray.length > 0) {
+        statusArray.forEach((statusType: string) => {
+          switch (statusType.toLowerCase()) {
+            case "active":
+              statusConditions.push({
+                [Op.and]: [
+                  { "$roleData.mutedOn$": null },
+                  { "$roleData.suspendedOn$": null },
+                ]
+              });
+              break;
+            case "suspended":
+              statusConditions.push({
+                [Op.and]: [
+                  { "$roleData.suspendedOn$": { [Op.ne]: null } },
+                  { appealMessage: { [Op.ne]: null } }
+                ]
+              });
+              break;
+            case "muted":
+              statusConditions.push({
+                [Op.and]: [
+                  { "$roleData.mutedOn$": { [Op.ne]: null } },
+                  { appealMessage: { [Op.ne]: null } }
+                ]
+              });
+              break;
+          }
+        });
+      }
+
+      // Combine search and status conditions
+      const combinedConditions: any[] = [];
+      if (searchConditions.length > 0) {
+        combinedConditions.push({ [Op.or]: searchConditions });
+      }
+      if (statusConditions.length > 0) {
+        combinedConditions.push({ [Op.or]: statusConditions });
+      }
+
+      if (combinedConditions.length > 0) {
+        whereClause[Op.and] = combinedConditions;
+      }
+
+      if (hasAppeal !== null) {
+        if (hasAppeal === true) {
+          whereClause.hasAppeal = true;
+        } else if (hasAppeal === false) {
+          whereClause.hasAppeal = false;
+        }
+      } else {
+        // Default behavior: only show companies with appeals
+        whereClause.hasAppeal = true;
+      }
+      const includeArray: any[] = [
+        {
+          model: roleData,
+          as: "roleData",
+          required: statusArray.length > 0 || (search && search.trim()), 
+          attributes: [
+            "id",
+            "firstName",
+            "lastName", 
+            "companyName",
+            "profile",
+            "mutedOn",
+            "suspendedOn",
+            "isApproved",
+            "industryId",
+            "languageId",
+            "chamberCommerceNumber",
+            "title",
+            "currentSituationId",
+            "accountStatus"
+          ],
+        },
+      ];
+
+      const { count: totalCount, rows: companiesList } = await users.findAndCountAll({
+        where: whereClause,
+        include: includeArray,
+        limit: parseInt(limit),
+        offset: parseInt(offset),
+        order: [["createdAt", "DESC"]],
+        attributes: [
+          "id",
+          "roleId",
+          "name", 
+          "phone",
+          "email",
+          "appealMessage",
+          "hasAppeal",
+          "createdAt"
+        ],
+      });
+
+      const companiesWithWarnings = await Promise.all(
+        companiesList.map(async (company: any) => {
+          const muteCount = await userLog.count({
+            where: {
+              userId: company.id,
+              isMuted: true,
+              deletedAt: null,
+            },
+          });
+
+          const suspendCount = await userLog.count({
+            where: {
+              userId: company.id,
+              isSuspend: true,
+              deletedAt: null,
+            },
+          });
+        
+          let currentStatus = "active";
+          if (company.roleData?.suspendedOn) {
+            currentStatus = "suspended";
+          } else if (company.roleData?.mutedOn) {
+            currentStatus = "muted";
+          }
+
+          return {
+            id: company.id,
+            roleId: company.roleId,
+            name: company.name,
+            profilePicture: company.roleData?.profile || null,
+            phone: company.phone,
+            email: company.email,
+            status: currentStatus,
+            warnings: {
+              total: muteCount + suspendCount,
+              mute: muteCount,
+              suspend: suspendCount,
+            },
+            hasAppeal: company.hasAppeal,
+            appealMessage: company.appealMessage,
+            createdAt: company.createdAt,
+            roleData: company.roleData || null,
+          };
+        })
+      );
+
+      const totalPages = Math.ceil(totalCount / limit);
+
+      return {
+        companies: companiesWithWarnings,
         pagination: {
           limit: parseInt(limit),
           offset: parseInt(offset),
@@ -4241,6 +4944,129 @@ export class AdminService {
     };
   };
 
+  public getReportedCompaniesList = async (data: any): Promise<any> => {
+    const { limit, offset, search } = data;
+
+    let whereClause: any = {
+      deletedAt: null
+    };
+    whereClause.reportedUserId = {
+      [Op.and]: [Sequelize.literal('reportedUserId IS NOT NULL')]
+    };
+    // Filter for companies only (roleId: 2)
+    whereClause.reportedRoleId = 2;
+
+    if (search && search.trim()) {
+      const searchTerm = search.trim();
+      whereClause[Op.or] = [
+        { problem: { [Op.like]: `%${searchTerm}%` } },
+        // Search in reported company info
+        Sequelize.literal(`EXISTS (
+          SELECT 1 FROM users u 
+          LEFT JOIN roleData rd ON u.id = rd.userId 
+          WHERE u.id = report.reportedUserId 
+          AND u.roleId = 2
+          AND u.deletedAt IS NULL
+          AND (
+            u.name LIKE '%${searchTerm}%' 
+            OR rd.firstName LIKE '%${searchTerm}%' 
+            OR rd.lastName LIKE '%${searchTerm}%'
+            OR rd.companyName LIKE '%${searchTerm}%'
+            OR rd.chamberCommerceNumber LIKE '%${searchTerm}%'
+          )
+        )`),
+        // Search in reporter info
+        Sequelize.literal(`EXISTS (
+          SELECT 1 FROM users u 
+          LEFT JOIN roleData rd ON u.id = rd.userId 
+          WHERE u.id = report.userId 
+          AND u.deletedAt IS NULL
+          AND (
+            u.name LIKE '%${searchTerm}%' 
+            OR rd.firstName LIKE '%${searchTerm}%' 
+            OR rd.lastName LIKE '%${searchTerm}%'
+            OR rd.companyName LIKE '%${searchTerm}%'
+          )
+        )`),
+        Sequelize.literal(`EXISTS (
+          SELECT 1 FROM employee e 
+          LEFT JOIN users u ON e.userId = u.id
+          LEFT JOIN roleData rd ON u.id = rd.userId
+          WHERE e.id = report.userId 
+          AND e.deletedAt IS NULL
+          AND (
+            e.firstName LIKE '%${searchTerm}%' 
+            OR e.lastName LIKE '%${searchTerm}%'
+            OR u.name LIKE '%${searchTerm}%'
+            OR rd.companyName LIKE '%${searchTerm}%'
+          )
+        )`)
+      ];
+    }
+
+    const response: any = await report.findAndCountAll({
+      where: whereClause,
+      attributes: [
+        "id",
+        "reportedUserId",
+        "reportedRoleId",
+        "createdAt"
+      ],
+      order: [["createdAt", "DESC"]],
+      limit: limit,
+      offset: offset * limit,
+      distinct: true
+    });
+
+    const formattedRows = await Promise.all(
+      response.rows.map(async (reportItem: any) => {
+        const reportedCompany = await users.findOne({
+          where: { id: reportItem.reportedUserId, roleId: 2, deletedAt: null },
+          attributes: ["id", "name", "roleId"],
+          include: [
+            {
+              model: roleData,
+              as: "roleData",
+              attributes: ["firstName", "lastName", "profile", "companyName", "chamberCommerceNumber"],
+              required: false
+            }
+          ]
+        });
+
+        let reportedCompanyInfo = null;
+        if (reportedCompany) {
+          const companyRoleData = reportedCompany.roleData as any;
+          reportedCompanyInfo = {
+            id: reportedCompany.id,
+            name: companyRoleData?.companyName || companyRoleData?.firstName && companyRoleData?.lastName
+              ? `${companyRoleData.firstName} ${companyRoleData.lastName}`
+              : reportedCompany.name,
+            profile: companyRoleData?.profile,
+            roleId: reportedCompany.roleId,
+            companyName: companyRoleData?.companyName,
+            chamberCommerceNumber: companyRoleData?.chamberCommerceNumber
+          };
+        }
+
+        return {
+          id: reportItem.id,
+          name: reportedCompanyInfo?.name || 'Unknown Company',
+          profile: reportedCompanyInfo?.profile || null,
+          companyName: reportedCompanyInfo?.companyName || null,
+          chamberCommerceNumber: reportedCompanyInfo?.chamberCommerceNumber || null,
+          createdAt: reportItem.createdAt
+        };
+      })
+    );
+
+    return {
+      rows: formattedRows,
+      count: response.count,
+      limit: limit,
+      offset: offset
+    };
+  };
+
   public getReportedUserDetails = async (data: any): Promise<any> => {
     const { reportId } = data;
 
@@ -4369,6 +5195,114 @@ export class AdminService {
       problem: reportItem.problem,
       toxicityScores: {
         reportedUser: reportedUserToxicity?.toxicityScore || 0,
+        reporter: reporterToxicity?.toxicityScore || 0
+      }
+    };
+  };
+
+  public getReportedCompanyDetails = async (data: any): Promise<any> => {
+    const { reportId } = data;
+
+    const reportItem = await report.findOne({
+      where: { id: reportId, deletedAt: null },
+      attributes: [
+        "id",
+        "userId",
+        "roleId",
+        "reportedUserId",
+        "reportedRoleId",
+        "problem",
+        "createdAt"
+      ]
+    });
+
+    if (!reportItem) {
+      throw new Error("Report not found");
+    }
+
+    // Verify this is a company report
+    if (reportItem.reportedRoleId !== 2) {
+      throw new Error("This report is not for a company");
+    }
+
+    let reportedCompanyInfo = null;
+    const reportedCompany = await users.findOne({
+      where: { id: reportItem.reportedUserId, roleId: 2, deletedAt: null },
+      include: [
+        {
+          model: roleData,
+          as: "roleData",
+          required: false
+        }
+      ]
+    });
+
+    if (reportedCompany) {
+      reportedCompanyInfo = {
+        ...reportedCompany.toJSON(),
+        roleData: reportedCompany.roleData || null
+      };
+    }
+
+    let reporterInfo = null;
+    if (reportItem.roleId === 3) {
+      const reporterEmployee = await employee.findOne({
+        where: { id: reportItem.userId, deletedAt: null },
+        include: [
+          {
+            model: users,
+            as: "users",
+            include: [
+              {
+                model: roleData,
+                as: "roleData",
+                required: false
+              }
+            ],
+            required: false
+          }
+        ]
+      });
+
+      if (reporterEmployee) {
+        reporterInfo = {
+          ...reporterEmployee.toJSON(),
+          users: reporterEmployee.users ? {
+            ...(reporterEmployee.users as any).toJSON(),
+            roleData: (reporterEmployee.users as any).roleData || null
+          } : null
+        };
+      }
+    } else {
+      const reporterUser = await users.findOne({
+        where: { id: reportItem.userId, deletedAt: null },
+        include: [
+          {
+            model: roleData,
+            as: "roleData",
+            required: false
+          }
+        ]
+      });
+
+      if (reporterUser) {
+        reporterInfo = {
+          ...reporterUser.toJSON(),
+          roleData: reporterUser.roleData || null
+        };
+      }
+    }
+
+    const reportedCompanyToxicity = await this.toxicityService.getUserToxicityScore(reportItem.reportedUserId, reportItem.reportedRoleId);
+    const reporterToxicity = await this.toxicityService.getUserToxicityScore(reportItem.userId, reportItem.roleId);
+
+    return {
+      ...reportItem.toJSON(),
+      reportedCompany: reportedCompanyInfo || null,
+      reporter: reporterInfo || null,
+      problem: reportItem.problem,
+      toxicityScores: {
+        reportedCompany: reportedCompanyToxicity?.toxicityScore || 0,
         reporter: reporterToxicity?.toxicityScore || 0
       }
     };
@@ -4619,7 +5553,7 @@ export class AdminService {
   };
 
   public markReportAsResolved = async (data: any): Promise<any> => {
-    const { reportId } = data;
+    const { reportId, reportedRoleId } = data;
     const existingReport = await report.findOne({
       where: { id: reportId, deletedAt: null }
     });
@@ -4627,16 +5561,29 @@ export class AdminService {
     if (!existingReport) {
       throw new Error("Report not found or already resolved");
     }
+
+    // If reportedRoleId is provided, validate it matches the report
+    if (reportedRoleId && existingReport.reportedRoleId !== reportedRoleId) {
+      const entityType = reportedRoleId === 2 ? "company" : reportedRoleId === 3 ? "employee" : "user";
+      throw new Error(`This report is not for a ${entityType}`);
+    }
+
     await report.update(
       { deletedAt: new Date() },
       { where: { id: reportId } }
     );
 
+    const entityType = existingReport.reportedRoleId === 2 ? "Company" : existingReport.reportedRoleId === 3 ? "Employee" : "User";
+    const message = `${entityType} report marked as resolved successfully`;
+
     return {
-      message: "Report marked as resolved successfully",
-      reportId: reportId
+      message: message,
+      reportId: reportId,
+      reportedRoleId: existingReport.reportedRoleId,
+      entityType: entityType
     };
   };
+
 
   public calculateUserToxicityScore = async (data: any): Promise<any> => {
     const { userId, roleId } = data;
@@ -4808,6 +5755,111 @@ export class AdminService {
     };
   };
 
+  public getCompanyThreads = async (data: any): Promise<any> => {
+    const { companyId, limit = 10, offset = 0 } = data;
+
+    // Check if company exists
+    const companyExists = await users.findOne({
+      where: { id: companyId, roleId: 2, deletedAt: null }
+    });
+    if (!companyExists) {
+      throw new Error("Company not found");
+    }
+
+    // Get threads where company is the owner
+    const ownedThreads = await threads.findAll({
+      where: {
+        ownerId: companyId,
+        deletedAt: null
+      },
+      attributes: [
+        "id",
+        "title",
+        "description",
+        "categoryId",
+        "subCategoryId",
+        "locked",
+        "createdAt",
+        "updatedAt"
+      ],
+      include: [
+        {
+          model: forumCategory,
+          as: "forumCategory",
+          attributes: ["name"],
+          required: false
+        },
+        {
+          model: forumSubCategory,
+          as: "forumSubCategory",
+          attributes: ["name"],
+          required: false
+        }
+      ],
+      order: [["createdAt", "DESC"]]
+    });
+
+    // Get threads where company has sent messages
+    const participatedThreads = await threads.findAll({
+      where: {
+        id: {
+          [Op.in]: Sequelize.literal(`(
+            SELECT DISTINCT roomId 
+            FROM messages 
+            WHERE userId = ${companyId} 
+            AND deletedAt IS NULL
+          )`)
+        },
+        deletedAt: null
+      },
+      attributes: [
+        "id",
+        "title",
+        "description",
+        "categoryId",
+        "subCategoryId",
+        "locked",
+        "createdAt",
+        "updatedAt"
+      ],
+      include: [
+        {
+          model: forumCategory,
+          as: "forumCategory",
+          attributes: ["name"],
+          required: false
+        },
+        {
+          model: forumSubCategory,
+          as: "forumSubCategory",
+          attributes: ["name"],
+          required: false
+        }
+      ],
+      order: [["createdAt", "DESC"]]
+    });
+
+    const allThreads = [...ownedThreads, ...participatedThreads];
+    const uniqueThreads = allThreads.filter((thread, index, self) =>
+      index === self.findIndex(t => t.id === thread.id)
+    );
+    const paginatedThreads = uniqueThreads.slice(offset * limit, (offset + 1) * limit);
+    const formattedThreads = paginatedThreads.map((thread: any) => ({
+      threadId: thread.id,
+      threadName: thread.title,
+      threadPath: thread.forumCategory?.name && thread.forumSubCategory?.name
+        ? `${thread.forumCategory.name} > ${thread.forumSubCategory.name}`
+        : thread.forumCategory?.name || thread.forumSubCategory?.name || null
+    }));
+
+    return {
+      threads: formattedThreads,
+      total: uniqueThreads.length,
+      limit: limit,
+      offset: offset
+    };
+  };
+
   public approveRejectUser = async (data: any): Promise<any> => {
     const { userId, status, adminId, rejectionReason, customLog } = data;
 
@@ -4846,6 +5898,40 @@ export class AdminService {
     );
 
     if (isApproved) {
+      // Remove intro video from AWS and set video to null in roleData
+      const userInfo: any = await roleData.findOne({ 
+        where: { userId: userId }, 
+        attributes: ['videoKey'], 
+        raw: true 
+      });
+      
+      if (userInfo?.videoKey) {
+        try {
+          const AWS = require('aws-sdk');
+          AWS.config.update({
+            accessKeyId: process.env.A_ACCESS_KEY_ID,
+            secretAccessKey: process.env.A_SECRET_ACCESS_KEY,
+          });
+          const BUCKET_NAME = `${process.env.FILE_UPLOAD_BUCKET_NAME}`;
+          const s3 = new AWS.S3();
+
+          const params = {
+            Bucket: BUCKET_NAME,
+            Key: userInfo.videoKey,
+          };
+
+          await s3.deleteObject(params).promise();
+          console.log(`Video deleted successfully for user ${userId}`);
+
+          await roleData.update(
+            { video: "", videoKey: "" },
+            { where: { userId: userId } }
+          );
+        } catch (error) {
+          console.error("Error deleting video from S3:", error);
+        }
+      }
+
       await userLog.create({
         userId: userId,
         isApproved: true,
@@ -4927,14 +6013,173 @@ export class AdminService {
     };
   };
 
+  public approveRejectCompany = async (data: any): Promise<any> => {
+    const { companyId, status, adminId, rejectionReason, customLog } = data;
+
+    const companyExists = await users.findOne({
+      where: { id: companyId, roleId: 2, deletedAt: null } // Filter for companies only
+    });
+    if (!companyExists) {
+      throw new Error("Company not found");
+    }
+
+    const adminExists = await admin.findOne({
+      where: { id: adminId, deletedAt: null }
+    });
+    if (!adminExists) {
+      throw new Error("Admin not found");
+    }
+
+    if (![3, 4].includes(status)) {
+      throw new Error("Invalid status. Use 3 for approved or 4 for rejected");
+    }
+
+    const isApproved = status === 3;
+    const isApprovedValue = isApproved ? true : false;
+
+    await users.update(
+      {
+        profileStatus: status,
+        rejectionReason: isApproved ? null : (rejectionReason || "No reason provided")
+      },
+      { where: { id: companyId } }
+    );
+
+    await roleData.update(
+      { isApproved: isApprovedValue },
+      { where: { userId: companyId } }
+    );
+
+    if (isApproved) {
+      // Remove intro video from AWS and set video to null in roleData
+      const companyInfo: any = await roleData.findOne({ 
+        where: { userId: companyId }, 
+        attributes: ['videoKey'], 
+        raw: true 
+      });
+      
+      if (companyInfo?.videoKey) {
+        try {
+          const AWS = require('aws-sdk');
+          AWS.config.update({
+            accessKeyId: process.env.A_ACCESS_KEY_ID,
+            secretAccessKey: process.env.A_SECRET_ACCESS_KEY,
+          });
+          const BUCKET_NAME = `${process.env.FILE_UPLOAD_BUCKET_NAME}`;
+          const s3 = new AWS.S3();
+
+          const params = {
+            Bucket: BUCKET_NAME,
+            Key: companyInfo.videoKey,
+          };
+
+          await s3.deleteObject(params).promise();
+          console.log(`Video deleted successfully for company ${companyId}`);
+
+          await roleData.update(
+            { video: "", videoKey: "" },
+            { where: { userId: companyId } }
+          );
+        } catch (error) {
+          console.error("Error deleting video from S3:", error);
+        }
+      }
+
+      await userLog.create({
+        userId: companyId,
+        isApproved: true,
+        approvedBy: adminId,
+        approvedOn: new Date()
+      });
+    } else {
+      if (customLog) {
+        // Create custom log only
+        await this.addCustomUserLog({
+          userId: companyId,
+          roleId: companyExists.roleId,
+          activity: customLog,
+          adminId: adminId
+        });
+      } else {
+        // Create standard rejection log only if no custom log provided
+        await userLog.create({
+          userId: companyId,
+          isApproved: false,
+          rejectedReason: rejectionReason || "No reason provided",
+          rejectedBy: adminId,
+          rejectedOn: new Date()
+        });
+      }
+    }
+
+    const companyData = await users.findOne({
+      where: { id: companyId },
+      attributes: ['fcmToken', "email", "name"],
+      include: [{
+        as: "roleData",
+        model: roleData,
+        attributes: ["companyName", "firstName", "lastName"]
+      }]
+    });
+
+    let companyName: string;
+    if (companyData && (companyData.roleData as any)?.companyName) {
+      companyName = (companyData.roleData as any).companyName;
+    } else {
+      companyName = `${(companyData?.roleData as any)?.firstName || ''} ${(companyData?.roleData as any)?.lastName || ''}`.trim();
+    }
+
+    const notificationStatus = isApproved ? "Goedgekeurd" : "Afgewezen";
+    const notificationBody = isApproved
+      ? "Uw bedrijfsaccount is succesvol goedgekeurd."
+      : `Uw bedrijfsaccount is afgewezen vanwege ${rejectionReason || "onbekende reden"}.`;
+
+    await userNotification.create({
+      userId: companyId,
+      adminId: adminId,
+      content: notificationBody,
+      seen: false,
+      typeId: isApproved ? 1 : 2 // 1 = approved, 2 = rejected
+    });
+
+    if (companyData?.fcmToken) {
+      try {
+        await sendPushNotification(
+          companyData.fcmToken,
+          `Bedrijfsaccount ${notificationStatus}`,
+          notificationBody,
+          ""
+        );
+      } catch (error) {
+        console.log("Failed to send push notification:", error);
+      }
+    }
+
+    return {
+      companyId: companyId,
+      status: status,
+      statusText: isApproved ? "Approved" : "Rejected",
+      adminId: adminId,
+      rejectionReason: isApproved ? null : (rejectionReason || "No reason provided"),
+      customLog: isApproved ? null : customLog,
+      processedAt: new Date()
+    };
+  };
+
   public reviewAppeal = async (data: any): Promise<any> => {
-    const { userId, status, adminId, rejectionReason } = data;
+    const { userId, roleId, status, adminId, rejectionReason } = data;
+
+    const whereClause: any = { id: userId, deletedAt: null };
+    if (roleId) {
+      whereClause.roleId = roleId;
+    }
 
     const userExists = await users.findOne({
-      where: { id: userId, deletedAt: null }
+      where: whereClause
     });
     if (!userExists) {
-      throw new Error("User not found");
+      const entityType = roleId === 2 ? "Company" : roleId === 3 ? "Employee" : "User";
+      throw new Error(`${entityType} not found`);
     }
 
     const adminExists = await admin.findOne({
@@ -4945,7 +6190,8 @@ export class AdminService {
     }
 
     if (!userExists.appealMessage) {
-      throw new Error("No appeal found for this user");
+      const entityType = roleId === 2 ? "company" : roleId === 3 ? "employee" : "user";
+      throw new Error(`No appeal found for this ${entityType}`);
     }
 
     if (!["approved", "rejected"].includes(status)) {
@@ -4988,7 +6234,8 @@ export class AdminService {
       }
     }
     const updateData: any = {
-      appealMessage: null
+      appealMessage: null,
+      hasAppeal: false
     };
 
     if (status === "rejected" && rejectionReason) {
@@ -5027,8 +6274,13 @@ export class AdminService {
       }
     }
 
+    const entityType = roleId === 2 ? "Company" : roleId === 3 ? "Employee" : "User";
+    const entityId = roleId === 2 ? "companyId" : roleId === 3 ? "employeeId" : "userId";
+    
     return {
-      userId: userId,
+      [entityId]: userId,
+      roleId: roleId || userExists.roleId,
+      entityType: entityType,
       status: status,
       statusText: status === "approved" ? "Approved" : "Rejected",
       adminId: adminId,
@@ -5036,6 +6288,7 @@ export class AdminService {
       processedAt: new Date()
     };
   };
+
 }
 
 const generateOTP = () => {
