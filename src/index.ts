@@ -6,12 +6,12 @@ import path from "path";
 import * as dotenv from "dotenv";
 import { sequelize } from "../src/config/database";
 import { routes } from "./routes/routes";
+dotenv.config({ path: ".env" });
 import { authenticateUser } from "./shared/middleware/authMiddleware";
 import * as http from "http";
 import { socketRouter } from "./routes/socket.routes";
 const { Server } = require("socket.io");
 
-dotenv.config({ path: ".env" });
 
 const app = express();
 app.use(express.urlencoded({ extended: true }));

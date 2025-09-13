@@ -1489,7 +1489,13 @@ export class AdminService {
             "video",
             "title",
             "companyName",
-            "hourlyRate"
+            "hourlyRate",
+            "city",
+            "province",
+            "website",
+            "postalCode",
+            "houseName",
+            "streetName"
           ],
           required: false
         },
@@ -2004,6 +2010,15 @@ export class AdminService {
           { accountStatus: 1 },
           { where: { userId: userId }, transaction }
         );
+        
+        // Remove appeal when unsuspending user
+        await users.update(
+          { 
+            appealMessage: "", 
+            hasAppeal: false 
+          },
+          { where: { id: userId }, transaction }
+        );
       }
     }
 
@@ -2092,6 +2107,15 @@ export class AdminService {
         await roleData.update(
           { accountStatus: 1 },
           { where: { userId: userId }, transaction }
+        );
+        
+        // Remove appeal when unmuting user
+        await users.update(
+          { 
+            appealMessage: "", 
+            hasAppeal: false 
+          },
+          { where: { id: userId }, transaction }
         );
       }
     }
@@ -2906,9 +2930,27 @@ export class AdminService {
   };
 
   public getCompanyEmpInfoById = async (data: any): Promise<any> => {
-    const { userId } = data;
-    return await employee.findAndCountAll({
-      where: { userId: userId },
+    const { userId, search, limit = 10, offset = 0 } = data;
+    
+    let whereClause: any = { 
+      userId: userId,
+      deletedAt: null 
+    };
+
+    // Add search functionality
+    if (search && search.trim()) {
+      const searchTerm = `%${search.trim()}%`;
+      whereClause[Op.or] = [
+        { firstName: { [Op.like]: searchTerm } },
+        { lastName: { [Op.like]: searchTerm } },
+        { email: { [Op.like]: searchTerm } },
+        { phone: { [Op.like]: searchTerm } },
+        { currentSituationName: { [Op.like]: searchTerm } }
+      ];
+    }
+
+    const result = await employee.findAndCountAll({
+      where: whereClause,
       attributes: [
         "id",
         "profile",
@@ -2917,10 +2959,195 @@ export class AdminService {
         "currentSituationId",
         "currentSituationName",
         "phone",
+        "email",
         "profileStatus",
         "accountStatus",
+        "isApproved",
+        "createdAt",
+        "suspendedOn",
+        "mutedOn"
       ],
+      order: [
+        ["createdAt", "ASC"], // First created employee will be the representative
+        ["firstName", "ASC"]
+      ],
+      limit: parseInt(limit),
+      offset: parseInt(offset) * parseInt(limit),
     });
+
+    // Mark the first employee as representative
+    if (result.rows.length > 0) {
+      (result.rows[0] as any).dataValues.isRepresentative = true;
+    }
+
+    return result;
+  };
+
+  public getEmployeeDetails = async (data: any): Promise<any> => {
+    const { employeeId } = data;
+    
+    // Get employee basic info
+    const employeeInfo = await employee.findOne({
+      where: { id: employeeId, deletedAt: null },
+      attributes: [
+        "id",
+        "userId",
+        "profile",
+        "firstName",
+        "lastName",
+        "currentSituationId",
+        "currentSituationName",
+        "email",
+        "phone",
+        "profileStatus",
+        "accountStatus",
+        "isApproved",
+        "rejectionReason",
+        "createdAt",
+        "updatedAt",
+        "suspendedOn",
+        "mutedOn",
+        "suspendReason",
+        "muteReason"
+      ],
+      include: [
+        {
+          model: users,
+          as: "users",
+          attributes: ["id", "roleId", "name"],
+          include: [
+            {
+              model: roleData,
+              as: "roleData",
+              attributes: ["id", "companyName", "city", "province", "website"],
+              required: false
+            }
+          ]
+        }
+      ]
+    });
+
+    if (!employeeInfo) {
+      throw new Error("Employee not found");
+    }
+
+    const companyName = (employeeInfo.users as any)?.roleData?.companyName || "Unknown Company";
+
+    // Get employee logs
+    const employeeLogs = await this.getUserLogInfo({ 
+      userId: employeeInfo.userId, 
+      roleId: 3, // Employee role
+      employeeId: employeeId 
+    });
+
+    // Get threads created by this employee
+    const threadsCreated = await threads.findAndCountAll({
+      where: { 
+        ownerEmpId: employeeId,
+        deletedAt: null 
+      },
+      attributes: [
+        "id",
+        "title",
+        "description",
+        "createdAt",
+        "locked",
+        "typeId"
+      ],
+      include: [
+        {
+          model: forumCategory,
+          as: "forumCategory",
+          attributes: ["id", "name"],
+          required: false
+        },
+        {
+          model: forumSubCategory,
+          as: "forumSubCategory", 
+          attributes: ["id", "name"],
+          required: false
+        }
+      ],
+      order: [["createdAt", "DESC"]],
+      limit: 10
+    });
+
+    // Get private threads created by this employee
+    const privateThreadsCreated = await privateThreads.findAndCountAll({
+      where: { 
+        ownerEmpId: employeeId,
+        deletedAt: null 
+      },
+      attributes: [
+        "id",
+        "title",
+        "createdAt"
+      ],
+      order: [["createdAt", "DESC"]],
+      limit: 10
+    });
+
+    // Get warning counts
+    const warningCounts = await userLog.findAll({
+      where: { employeeId: employeeId },
+      attributes: [
+        [Sequelize.fn('COUNT', Sequelize.literal('CASE WHEN isMuted = true THEN 1 END')), 'muteCount'],
+        [Sequelize.fn('COUNT', Sequelize.literal('CASE WHEN isSuspend = true THEN 1 END')), 'suspendCount']
+      ],
+      raw: true
+    });
+
+    const warnings: any = warningCounts[0] || {
+      muteCount: 0,
+      suspendCount: 0
+    };
+
+    // Get latest mute and suspend actions
+    const latestMute = await userLog.findOne({
+      where: { employeeId: employeeId, isMuted: true },
+      include: [
+        {
+          model: admin,
+          as: "mute",
+          attributes: ["id", "name", "adminRoleId"],
+          required: false
+        }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+
+    const latestSuspend = await userLog.findOne({
+      where: { employeeId: employeeId, isSuspend: true },
+      include: [
+        {
+          model: admin,
+          as: "suspend",
+          attributes: ["id", "name", "adminRoleId"],
+          required: false
+        }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+
+    return {
+      ...employeeInfo.toJSON(),
+      companyName,
+      logs: employeeLogs,
+      threads: {
+        public: threadsCreated,
+        private: privateThreadsCreated
+      },
+      warnings: {
+        muted: {
+          count: parseInt(warnings.muteCount) || 0,
+          admin: latestMute?.mute ? (latestMute.mute as any).toJSON() : null
+        },
+        suspended: {
+          count: parseInt(warnings.suspendCount) || 0,
+          admin: latestSuspend?.suspend ? (latestSuspend.suspend as any).toJSON() : null
+        }
+      }
+    };
   };
 
   public updateModeratorStatus = async (
@@ -4432,6 +4659,8 @@ export class AdminService {
 
       const whereClause: any = {
         deletedAt: null,
+        roleId: 1, // Filter for entrepreneurs/individuals only
+        hasAppeal: true, // Only users with appeals
       };
 
       const statusArray = Array.isArray(status) ? status : (status ? [status] : []);
@@ -4457,15 +4686,15 @@ export class AdminService {
             case "active":
               statusConditions.push({
                 [Op.and]: [
-                  { "$roleData.mutedOn$": null },
-                  { "$roleData.suspendedOn$": null },
+                  { "$roleData.accountStatus$": 1 },
+                  { appealMessage: { [Op.ne]: null } }
                 ]
               });
               break;
             case "suspended":
               statusConditions.push({
                 [Op.and]: [
-                  { "$roleData.suspendedOn$": { [Op.ne]: null } },
+                  { "$roleData.accountStatus$": 3 },
                   { appealMessage: { [Op.ne]: null } }
                 ]
               });
@@ -4473,7 +4702,7 @@ export class AdminService {
             case "muted":
               statusConditions.push({
                 [Op.and]: [
-                  { "$roleData.mutedOn$": { [Op.ne]: null } },
+                  { "$roleData.accountStatus$": 4 },
                   { appealMessage: { [Op.ne]: null } }
                 ]
               });
@@ -4506,7 +4735,7 @@ export class AdminService {
         {
           model: roleData,
           as: "roleData",
-          required: statusArray.length > 0 || (search && search.trim()), 
+          required: true, // Always required for users with appeals
           attributes: [
             "id",
             "firstName",
@@ -4563,9 +4792,10 @@ export class AdminService {
           });
         
           let currentStatus = "active";
-          if (user.roleData?.suspendedOn) {
+          // Use accountStatus to determine current status instead of date fields
+          if (user.roleData?.accountStatus === 3) {
             currentStatus = "suspended";
-          } else if (user.roleData?.mutedOn) {
+          } else if (user.roleData?.accountStatus === 4) {
             currentStatus = "muted";
           }
 
@@ -4639,7 +4869,6 @@ export class AdminService {
         );
       }
       
-      // Build status conditions
       const statusConditions: any[] = [];
       if (statusArray.length > 0) {
         statusArray.forEach((statusType: string) => {
@@ -4647,15 +4876,15 @@ export class AdminService {
             case "active":
               statusConditions.push({
                 [Op.and]: [
-                  { "$roleData.mutedOn$": null },
-                  { "$roleData.suspendedOn$": null },
+                  { "$roleData.accountStatus$": 1 },
+                  { appealMessage: { [Op.ne]: null } }
                 ]
               });
               break;
             case "suspended":
               statusConditions.push({
                 [Op.and]: [
-                  { "$roleData.suspendedOn$": { [Op.ne]: null } },
+                  { "$roleData.accountStatus$": 3 },
                   { appealMessage: { [Op.ne]: null } }
                 ]
               });
@@ -4663,7 +4892,7 @@ export class AdminService {
             case "muted":
               statusConditions.push({
                 [Op.and]: [
-                  { "$roleData.mutedOn$": { [Op.ne]: null } },
+                  { "$roleData.accountStatus$": 4 },
                   { appealMessage: { [Op.ne]: null } }
                 ]
               });
@@ -4672,7 +4901,6 @@ export class AdminService {
         });
       }
 
-      // Combine search and status conditions
       const combinedConditions: any[] = [];
       if (searchConditions.length > 0) {
         combinedConditions.push({ [Op.or]: searchConditions });
@@ -4699,7 +4927,7 @@ export class AdminService {
         {
           model: roleData,
           as: "roleData",
-          required: statusArray.length > 0 || (search && search.trim()), 
+          required: true, // Always required for companies
           attributes: [
             "id",
             "firstName",
@@ -4756,9 +4984,9 @@ export class AdminService {
           });
         
           let currentStatus = "active";
-          if (company.roleData?.suspendedOn) {
+          if (company.roleData?.accountStatus === 3) {
             currentStatus = "suspended";
-          } else if (company.roleData?.mutedOn) {
+          } else if (company.roleData?.accountStatus === 4) {
             currentStatus = "muted";
           }
 
@@ -4809,34 +5037,24 @@ export class AdminService {
     whereClause.reportedUserId = {
       [Op.and]: [Sequelize.literal('reportedUserId IS NOT NULL')]
     };
+    // Filter for entrepreneurs/individuals only (roleId: 1)
+    whereClause.reportedRoleId = 1;
 
     if (search && search.trim()) {
       const searchTerm = search.trim();
       whereClause[Op.or] = [
         { problem: { [Op.like]: `%${searchTerm}%` } },
-        // Search in reported user info
+        // Search in reported user info (only roleId 1)
         Sequelize.literal(`EXISTS (
           SELECT 1 FROM users u 
           LEFT JOIN roleData rd ON u.id = rd.userId 
           WHERE u.id = report.reportedUserId 
+          AND u.roleId = 1
           AND u.deletedAt IS NULL
           AND (
             u.name LIKE '%${searchTerm}%' 
             OR rd.firstName LIKE '%${searchTerm}%' 
             OR rd.lastName LIKE '%${searchTerm}%'
-            OR rd.companyName LIKE '%${searchTerm}%'
-          )
-        )`),
-        Sequelize.literal(`EXISTS (
-          SELECT 1 FROM employee e 
-          LEFT JOIN users u ON e.userId = u.id
-          LEFT JOIN roleData rd ON u.id = rd.userId
-          WHERE e.id = report.reportedUserId 
-          AND e.deletedAt IS NULL
-          AND (
-            e.firstName LIKE '%${searchTerm}%' 
-            OR e.lastName LIKE '%${searchTerm}%'
-            OR u.name LIKE '%${searchTerm}%'
             OR rd.companyName LIKE '%${searchTerm}%'
           )
         )`),
@@ -4885,24 +5103,8 @@ export class AdminService {
 
     const formattedRows = await Promise.all(
       response.rows.map(async (reportItem: any) => {
-        let reportedUserInfo = null;
-        if (reportItem.reportedRoleId === 3) {
-          const reportedEmployee = await employee.findOne({
-            where: { id: reportItem.reportedUserId, deletedAt: null },
-            attributes: ["id", "firstName", "lastName", "profile"]
-          });
-
-          if (reportedEmployee) {
-            reportedUserInfo = {
-              id: reportedEmployee.id,
-              name: `${reportedEmployee.firstName} ${reportedEmployee.lastName}`,
-              profile: reportedEmployee.profile,
-              roleId: 3
-            };
-          }
-        } else {
           const reportedUser = await users.findOne({
-            where: { id: reportItem.reportedUserId, deletedAt: null },
+          where: { id: reportItem.reportedUserId, deletedAt: null, roleId: 1 },
             attributes: ["id", "name", "roleId"],
             include: [
               {
@@ -4914,6 +5116,7 @@ export class AdminService {
             ]
           });
 
+        let reportedUserInfo = null;
           if (reportedUser) {
             const userRoleData = reportedUser.roleData as any;
             reportedUserInfo = {
@@ -4924,7 +5127,6 @@ export class AdminService {
               profile: userRoleData?.profile,
               roleId: reportedUser.roleId
             };
-          }
         }
 
         return {
@@ -4935,7 +5137,6 @@ export class AdminService {
         };
       })
     );
-
     return {
       rows: formattedRows,
       count: response.count,
@@ -4943,7 +5144,6 @@ export class AdminService {
       offset: offset
     };
   };
-
   public getReportedCompaniesList = async (data: any): Promise<any> => {
     const { limit, offset, search } = data;
 
@@ -4953,14 +5153,12 @@ export class AdminService {
     whereClause.reportedUserId = {
       [Op.and]: [Sequelize.literal('reportedUserId IS NOT NULL')]
     };
-    // Filter for companies only (roleId: 2)
     whereClause.reportedRoleId = 2;
 
     if (search && search.trim()) {
       const searchTerm = search.trim();
       whereClause[Op.or] = [
         { problem: { [Op.like]: `%${searchTerm}%` } },
-        // Search in reported company info
         Sequelize.literal(`EXISTS (
           SELECT 1 FROM users u 
           LEFT JOIN roleData rd ON u.id = rd.userId 

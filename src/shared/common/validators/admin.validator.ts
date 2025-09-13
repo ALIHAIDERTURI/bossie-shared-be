@@ -44,6 +44,7 @@ export const suspendUserSchema = Joi.object({
   muteReason: Joi.string().allow("", null).optional(),
 });
 
+
 export const updateModeratorStatusSchema = Joi.object({
   adminId: Joi.number().integer().required(),
   isSuspend: Joi.boolean().required(),
@@ -53,6 +54,13 @@ export const updateModeratorStatusSchema = Joi.object({
 });
 
 export const limitDefaultSchema = Joi.object({
+  limit: Joi.number().integer().min(1).max(100).default(10),
+  offset: Joi.number().integer().min(0).default(0),
+  search: Joi.string().allow("", null).optional(),
+});
+
+export const getCompanyEmpInfoSchema = Joi.object({
+  userId: Joi.number().integer().required(),
   limit: Joi.number().integer().min(1).max(100).default(10),
   offset: Joi.number().integer().min(0).default(0),
   search: Joi.string().allow("", null).optional(),

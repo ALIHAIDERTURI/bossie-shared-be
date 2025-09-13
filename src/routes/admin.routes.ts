@@ -85,6 +85,10 @@ adminRouter.get("/getCompanyEmpInfoById", (...args: [Request, Response]) =>
   adminControler.getCompanyEmpInfoById(...args)
 );
 
+adminRouter.get("/getEmployeeDetails/:id", (...args: [Request, Response]) =>
+  adminControler.getEmployeeDetails(...args)
+);
+
 adminRouter.post("/updateModeratorStatus", (...args: [Request, Response]) =>
   adminControler.updateModeratorStatus(...args)
 );

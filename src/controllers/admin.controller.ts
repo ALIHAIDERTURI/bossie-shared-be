@@ -11,6 +11,7 @@ import {
   getAllUsersSchema,
   getAppInfoSchema,
   getReportedThreadChatByIdSchema,
+  getCompanyEmpInfoSchema,
   getThreadDetailsByIdSchema,
   getUserLogInfoSchema,
   idDefaultSchema,
@@ -398,7 +399,7 @@ export class AdminController {
 
   public getCompanyInfoById = async (req: Request, res: Response) => {
     try {
-      let message = "User info fetched successfully.";
+      let message = "Company info fetched successfully.";
       const { query } = req;
       const data = await idDefaultSchema.validateAsync(query);
       const response: any = await this.__service.getCompanyInfoById(data);
@@ -418,7 +419,7 @@ export class AdminController {
 
   public getReportedThread = async (req: Request, res: Response) => {
     try {
-      let message = "User info fetched successfully.";
+      let message = "Reported thread fetched successfully.";
       const { query } = req;
       const response: any = await this.__service.getReportedThread(query);
 
@@ -437,7 +438,7 @@ export class AdminController {
 
   public getReportedThreadChatById = async (req: Request, res: Response) => {
     try {
-      let message = "User info fetched successfully.";
+      let message = "Reported thread chat fetched successfully.";
       const { query } = req;
       const data = await getReportedThreadChatByIdSchema.validateAsync(query);
       const response: any = await this.__service.getReportedThreadChatById(
@@ -458,10 +459,31 @@ export class AdminController {
   };
   public getCompanyEmpInfoById = async (req: Request, res: Response) => {
     try {
-      let message = "User info fetched successfully.";
+      let message = "Employee info fetched successfully.";
       const { query } = req;
-      const data = await userDefaultSchema.validateAsync(query);
+      const data = await getCompanyEmpInfoSchema.validateAsync(query);
       const response: any = await this.__service.getCompanyEmpInfoById(data);
+
+      res.status(200).json({
+        statusCode: 200,
+        message,
+        response,
+      });
+    } catch (error: any) {
+      res.status(403).send({
+        statusCode: 403,
+        message: error.message,
+      });
+    }
+  };
+
+  public getEmployeeDetails = async (req: Request, res: Response) => {
+    try {
+      let message = "Employee details fetched successfully.";
+      const { params } = req;
+      const validatedData = await idDefaultSchema.validateAsync(params);
+      const data = { employeeId: validatedData.id };
+      const response: any = await this.__service.getEmployeeDetails(data);
 
       res.status(200).json({
         statusCode: 200,

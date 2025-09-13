@@ -250,7 +250,8 @@ export class UserService {
       var usersObj: any = {
         emailVerified: true,
         isOtpUsed: true,
-        fcmToken: fcmToken
+        fcmToken: fcmToken,
+        lastLogin: new Date()
       };
     } else {
       const isOTPValid =
@@ -336,13 +337,29 @@ export class UserService {
         employeeCount: employeeCount,
       };
     } else {
+      // Get employee data first to access userId
+      const employeeData = await employee.findOne({
+        where: { id: userId, deletedAt: null }, raw: true
+      });
+      
+      if (!employeeData) {
+        throw new Error("Employee not found.");
+      }
+      
       await employee.update(
         { ...usersObj, updatedAt: new Date() },
         { where: { id: userId } }
       );
-      userResponse = await employee.findOne({
-        where: { id: userId, deletedAt: null }, raw: true
-      });
+      
+      // Update lastLogin for the company user when employee logs in
+      if (atLogin && employeeData) {
+        await users.update(
+          { lastLogin: new Date() },
+          { where: { id: employeeData.userId } }
+        );
+      }
+      
+      userResponse = employeeData;
 
       const compData: any = await roleData.findOne({ where: { userId: userResponse.userId }, attributes: ["companyName"], raw: true })
       response = {
@@ -553,6 +570,16 @@ export class UserService {
         }
       );
 
+      // Update lastLogin for the company user
+      await users.update(
+        { lastLogin: new Date() },
+        {
+          where: {
+            id: employeeData.userId,
+          },
+        }
+      );
+
       const compData: any = await roleData.findOne({ where: { userId: employeeData.userId }, attributes: ["companyName"], raw: true })
 
       const response = {
@@ -692,7 +719,7 @@ export class UserService {
     });
 
     await users.update(
-      { firstTimeLogin: false, fcmToken: fcmToken },
+      { firstTimeLogin: false, fcmToken: fcmToken, lastLogin: new Date() },
       {
         where: {
           id: userData.id,

@@ -41,6 +41,7 @@ export interface userI {
   fcmToken?: string;
   appealMessage?: string;
   hasAppeal?: boolean;
+  lastLogin?: Date;
   createdAt?: Date;
   updatedAt?: Date;
   deletedAt?: Date | null;
@@ -129,6 +130,9 @@ export class users extends Model<userI> {
     defaultValue: 1, // Represents true in TINYINT
   })
   public firstTimeLogin: boolean;
+
+  @Column(DataType.DATE)
+  public lastLogin: Date;
 
   @Column(DataType.DATE)
   public createdAt: Date;
