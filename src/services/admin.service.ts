@@ -756,29 +756,27 @@ export class AdminService {
   }
 
 
-  // 🔹 NEW STATUS FILTER (Fixed for declined)
+// 🔹 STATUS FILTER (active / declined)
 if (filters?.status) {
   const statusMap: any = {
     active: 3,     // approved
     declined: 4,   // rejected
   };
 
-  if (statusMap.hasOwnProperty(filters.status)) {
-    const statusCondition = { profileStatus: statusMap[filters.status] };
+  const statusKey = filters.status.toLowerCase();
+  const statusCondition = { profileStatus: statusMap[statusKey] };
 
-    // If the filter is "declined", treat it independently
-    if (filters.status === "declined") {
-      whereClause.profileStatus = 4; // only fetch declined users
+  if (Object.keys(whereClause).length === 0) {
+    Object.assign(whereClause, statusCondition);
+  } else {
+    if (whereClause[Op.and]) {
+      whereClause[Op.and].push(statusCondition);
     } else {
-      // For "active" or other statuses, merge with existing type conditions
-      if (whereClause[Op.and]) {
-        whereClause[Op.and].push(statusCondition);
-      } else {
-        whereClause[Op.and] = [statusCondition];
-      }
+      whereClause = { [Op.and]: [whereClause, statusCondition] };
     }
   }
 }
+
 
 
   // 🔹 Existing SEARCH filter (unchanged)
