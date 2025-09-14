@@ -446,6 +446,7 @@ export class AdminService {
       limit: limit,
       offset: offset * limit,
       order: [["id", "desc"]],
+      logging: console.log, // 👈 Watch raw SQL
     });
 
     return response;
@@ -650,305 +651,326 @@ export class AdminService {
   };
 
   public getAllUsers = async (data: any): Promise<any> => {
-    const { limit, offset, filters } = data;
+  const { limit, offset, filters } = data;
 
-    if (filters?.industryId && typeof filters.industryId === 'string') {
-      try {
-        filters.industryId = JSON.parse(filters.industryId);
-      } catch (e) {
-        filters.industryId = [];
-      }
+  if (filters?.industryId && typeof filters.industryId === "string") {
+    try {
+      filters.industryId = JSON.parse(filters.industryId);
+    } catch (e) {
+      filters.industryId = [];
+    }
+  }
+
+  let whereClause: any = [];
+
+  // 🔹 Existing TYPE filter (unchanged)
+  if (filters?.type) {
+    const typeFilters = typeof filters.type === "string" ? filters.type.split(",") : [filters.type];
+    const typeConditions: any[] = [];
+    const validTypes = ["verified", "unVerified", "mute", "suspend", "approved", "muted"];
+
+    const invalidTypes = typeFilters.filter((type: string) => {
+      const trimmedType = type.trim();
+      return !validTypes.includes(trimmedType);
+    });
+
+    if (invalidTypes.length > 0) {
+      throw new Error(
+        `Invalid filter type(s): ${invalidTypes.join(", ")}. Valid types are: ${validTypes.join(", ")}`
+      );
     }
 
-    let whereClause: any = [];
-    if (filters?.type) {
-      const typeFilters = typeof filters.type === 'string' ? filters.type.split(',') : [filters.type];
-      const typeConditions: any[] = [];
-      const validTypes = ['verified', 'unVerified', 'mute', 'suspend', 'approved', 'muted'];
+    typeFilters.forEach((type: string) => {
+      const trimmedType = type.trim();
 
-      const invalidTypes = typeFilters.filter((type: string) => {
-        const trimmedType = type.trim();
-        return !validTypes.includes(trimmedType);
-      });
-
-      if (invalidTypes.length > 0) {
-        throw new Error(`Invalid filter type(s): ${invalidTypes.join(', ')}. Valid types are: ${validTypes.join(', ')}`);
+      switch (trimmedType) {
+        case "verified":
+          typeConditions.push({ "$roleData.isApproved$": true });
+          break;
+        case "unVerified":
+          typeConditions.push({ profileStatus: 2 });
+          break;
+        case "mute":
+        case "muted":
+          typeConditions.push({
+            id: {
+              [Op.in]: Sequelize.literal(
+                `(SELECT DISTINCT ul1.userId 
+                  FROM userLog ul1 
+                  WHERE ul1.isMuted = true 
+                  AND ul1.deletedAt IS NULL
+                  AND NOT EXISTS (
+                    SELECT 1 FROM userLog ul2 
+                    WHERE ul2.userId = ul1.userId 
+                    AND ul2.isMuted = false 
+                    AND ul2.createdAt > ul1.createdAt 
+                    AND ul2.deletedAt IS NULL
+                  ))`
+              ),
+            },
+          });
+          break;
+        case "suspend":
+          typeConditions.push({
+            id: {
+              [Op.in]: Sequelize.literal(
+                `(SELECT DISTINCT ul1.userId 
+                  FROM userLog ul1 
+                  WHERE ul1.isSuspend = true 
+                  AND ul1.deletedAt IS NULL
+                  AND NOT EXISTS (
+                    SELECT 1 FROM userLog ul2 
+                    WHERE ul2.userId = ul1.userId 
+                    AND ul2.isSuspend = false 
+                    AND ul2.createdAt > ul1.createdAt 
+                    AND ul2.deletedAt IS NULL
+                  ))`
+              ),
+            },
+          });
+          break;
+        case "approved":
+          typeConditions.push({ "$roleData.isApproved$": true });
+          break;
       }
-
-      typeFilters.forEach((type: string) => {
-        const trimmedType = type.trim();
-
-        switch (trimmedType) {
-          case "verified":
-            typeConditions.push({ "$roleData.isApproved$": true });
-            break;
-          case "unVerified":
-            typeConditions.push({
-              "profileStatus": 2,
-            });
-            break;
-          case "mute":
-            typeConditions.push({
-              id: {
-                [Op.in]: Sequelize.literal(
-                  `(SELECT DISTINCT ul1.userId 
-                   FROM userLog ul1 
-                   WHERE ul1.isMuted = true 
-                   AND ul1.deletedAt IS NULL
-                   AND NOT EXISTS (
-                     SELECT 1 FROM userLog ul2 
-                     WHERE ul2.userId = ul1.userId 
-                     AND ul2.isMuted = false 
-                     AND ul2.createdAt > ul1.createdAt 
-                     AND ul2.deletedAt IS NULL
-                   ))`
-                )
-              }
-            });
-            break;
-          case "suspend":
-            typeConditions.push({
-              id: {
-                [Op.in]: Sequelize.literal(
-                  `(SELECT DISTINCT ul1.userId 
-                   FROM userLog ul1 
-                   WHERE ul1.isSuspend = true 
-                   AND ul1.deletedAt IS NULL
-                   AND NOT EXISTS (
-                     SELECT 1 FROM userLog ul2 
-                     WHERE ul2.userId = ul1.userId 
-                     AND ul2.isSuspend = false 
-                     AND ul2.createdAt > ul1.createdAt 
-                     AND ul2.deletedAt IS NULL
-                   ))`
-                )
-              }
-            });
-            break;
-          case "approved":
-            typeConditions.push({
-              "$roleData.isApproved$": true,
-            });
-            break;
-          case "muted":
-            typeConditions.push({
-              id: {
-                [Op.in]: Sequelize.literal(
-                  `(SELECT DISTINCT ul1.userId 
-                   FROM userLog ul1 
-                   WHERE ul1.isMuted = true 
-                   AND ul1.deletedAt IS NULL
-                   AND NOT EXISTS (
-                     SELECT 1 FROM userLog ul2 
-                     WHERE ul2.userId = ul1.userId 
-                     AND ul2.isMuted = false 
-                     AND ul2.createdAt > ul1.createdAt 
-                     AND ul2.deletedAt IS NULL
-                   ))`
-                )
-              }
-            });
-            break;
-        }
-      });
-      if (typeConditions.length > 0) {
-        if (typeConditions.length === 1) {
-          Object.assign(whereClause, typeConditions[0]);
-        } else {
-          whereClause[Op.and] = typeConditions;
-        }
+    });
+    if (typeConditions.length > 0) {
+      if (typeConditions.length === 1) {
+        Object.assign(whereClause, typeConditions[0]);
+      } else {
+        whereClause[Op.and] = typeConditions;
       }
     }
+  }
 
-    if (filters?.search) {
-      const searchTerm = filters.search.trim();
-      const searchConditions = [
-        { name: { [Op.like]: `%${searchTerm}%` } },
-        { email: { [Op.like]: `%${searchTerm}%` } },
-        { phone: { [Op.like]: `%${searchTerm}%` } },
-        Sequelize.literal(`EXISTS (SELECT 1 FROM roleData WHERE roleData.userId = users.id AND (roleData.firstName LIKE '%${searchTerm}%' OR roleData.lastName LIKE '%${searchTerm}%' OR roleData.companyName LIKE '%${searchTerm}%'))`)
+  // 🔹 NEW ROLE FILTER
+  if (filters?.role) {
+    const roleMap: any = {
+      freelancer: 1,
+      company: 2,
+      employee: 3,
+    };
+    if (roleMap[filters.role]) {
+      whereClause.roleId = roleMap[filters.role];
+    }
+  }
+
+
+  // 🔹 NEW STATUS FILTER (Fixed for declined)
+if (filters?.status) {
+  const statusMap: any = {
+    active: 3,     // approved
+    declined: 4,   // rejected
+  };
+
+  if (statusMap.hasOwnProperty(filters.status)) {
+    const statusCondition = { profileStatus: statusMap[filters.status] };
+
+    // If the filter is "declined", treat it independently
+    if (filters.status === "declined") {
+      whereClause.profileStatus = 4; // only fetch declined users
+    } else {
+      // For "active" or other statuses, merge with existing type conditions
+      if (whereClause[Op.and]) {
+        whereClause[Op.and].push(statusCondition);
+      } else {
+        whereClause[Op.and] = [statusCondition];
+      }
+    }
+  }
+}
+
+
+  // 🔹 Existing SEARCH filter (unchanged)
+  if (filters?.search) {
+    const searchTerm = filters.search.trim();
+    const searchConditions = [
+      { name: { [Op.like]: `%${searchTerm}%` } },
+      { email: { [Op.like]: `%${searchTerm}%` } },
+      { phone: { [Op.like]: `%${searchTerm}%` } },
+      Sequelize.literal(
+        `EXISTS (SELECT 1 FROM roleData WHERE roleData.userId = users.id AND (roleData.firstName LIKE '%${searchTerm}%' OR roleData.lastName LIKE '%${searchTerm}%' OR roleData.companyName LIKE '%${searchTerm}%'))`
+      ),
+    ];
+
+    if (whereClause[Op.and] || whereClause[Op.or]) {
+      const existingConditions = whereClause[Op.and] || whereClause[Op.or];
+      whereClause[Op.and] = [
+        ...(Array.isArray(existingConditions) ? existingConditions : [existingConditions]),
+        { [Op.or]: searchConditions },
       ];
+      delete whereClause[Op.or];
+    } else {
+      whereClause[Op.or] = searchConditions;
+    }
+  }
+
+  // 🔹 Existing CHAT AVAILABILITY filter (unchanged)
+  if (filters?.chatAvailability) {
+    const chatFilters =
+      typeof filters.chatAvailability === "string" ? filters.chatAvailability.split(",") : [filters.chatAvailability];
+    const chatConditions: any[] = [];
+    const validChatAvailability = ["available", "unavailable"];
+
+    const invalidChatAvailability = chatFilters.filter((availability: string) => {
+      const trimmedAvailability = availability.trim();
+      return !validChatAvailability.includes(trimmedAvailability);
+    });
+
+    if (invalidChatAvailability.length > 0) {
+      throw new Error(
+        `Invalid chat availability filter(s): ${invalidChatAvailability.join(", ")}. Valid options are: ${validChatAvailability.join(", ")}`
+      );
+    }
+
+    chatFilters.forEach((availability: string) => {
+      const trimmedAvailability = availability.trim();
+
+      switch (trimmedAvailability) {
+        case "available":
+          chatConditions.push({ "$roleData.accountStatus$": 1 });
+          break;
+        case "unavailable":
+          chatConditions.push({ "$roleData.accountStatus$": { [Op.or]: [0, null] } });
+          break;
+      }
+    });
+
+    if (chatConditions.length > 0) {
+      const chatFilter = chatConditions.length === 1 ? chatConditions[0] : { [Op.or]: chatConditions };
 
       if (whereClause[Op.and] || whereClause[Op.or]) {
         const existingConditions = whereClause[Op.and] || whereClause[Op.or];
         whereClause[Op.and] = [
           ...(Array.isArray(existingConditions) ? existingConditions : [existingConditions]),
-          { [Op.or]: searchConditions }
+          chatFilter,
         ];
         delete whereClause[Op.or];
       } else {
-        whereClause[Op.or] = searchConditions;
+        Object.assign(whereClause, chatFilter);
       }
     }
+  }
 
-    if (filters?.chatAvailability) {
-      const chatFilters = typeof filters.chatAvailability === 'string' ? filters.chatAvailability.split(',') : [filters.chatAvailability];
-      const chatConditions: any[] = [];
-      const validChatAvailability = ['available', 'unavailable'];
+  // 🔹 Existing INDUSTRY filter (unchanged)
+  if (filters?.industryId && filters.industryId.length > 0) {
+    const industryConditions = filters.industryId.map((id: number) =>
+      Sequelize.literal(`JSON_CONTAINS(\`roleData\`.\`industryId\`, '${id}', '$')`)
+    );
 
-      const invalidChatAvailability = chatFilters.filter((availability: string) => {
-        const trimmedAvailability = availability.trim();
-        return !validChatAvailability.includes(trimmedAvailability);
-      });
-
-      if (invalidChatAvailability.length > 0) {
-        throw new Error(`Invalid chat availability filter(s): ${invalidChatAvailability.join(', ')}. Valid options are: ${validChatAvailability.join(', ')}`);
-      }
-
-      chatFilters.forEach((availability: string) => {
-        const trimmedAvailability = availability.trim();
-
-        switch (trimmedAvailability) {
-          case "available":
-            chatConditions.push({ "$roleData.accountStatus$": 1 });
-            break;
-          case "unavailable":
-            chatConditions.push({
-              "$roleData.accountStatus$": {
-                [Op.or]: [0, null],
-              },
-            });
-            break;
-        }
-      });
-
-      if (chatConditions.length > 0) {
-        const chatFilter = chatConditions.length === 1 ? chatConditions[0] : { [Op.or]: chatConditions };
-
-        if (whereClause[Op.and] || whereClause[Op.or]) {
-          const existingConditions = whereClause[Op.and] || whereClause[Op.or];
-          whereClause[Op.and] = [
-            ...(Array.isArray(existingConditions) ? existingConditions : [existingConditions]),
-            chatFilter
-          ];
-          delete whereClause[Op.or];
-        } else {
-          Object.assign(whereClause, chatFilter);
-        }
-      }
-    }
-
-    if (filters?.industryId && filters.industryId.length > 0) {
-      const industryConditions = filters.industryId.map((id: number) =>
-          Sequelize.literal(
-            `JSON_CONTAINS(\`roleData\`.\`industryId\`, '${id}', '$')`
-          )
-      );
-
-      const industryFilter = industryConditions.length === 1
+    const industryFilter =
+      industryConditions.length === 1
         ? { "$roleData.industryId$": industryConditions[0] }
         : { "$roleData.industryId$": { [Op.and]: industryConditions } };
 
-      if (whereClause[Op.and] || whereClause[Op.or]) {
-        const existingConditions = whereClause[Op.and] || whereClause[Op.or];
-        whereClause[Op.and] = [
-          ...(Array.isArray(existingConditions) ? existingConditions : [existingConditions]),
-          industryFilter
-        ];
-        delete whereClause[Op.or];
-      } else {
-        Object.assign(whereClause, industryFilter);
-      }
+    if (whereClause[Op.and] || whereClause[Op.or]) {
+      const existingConditions = whereClause[Op.and] || whereClause[Op.or];
+      whereClause[Op.and] = [
+        ...(Array.isArray(existingConditions) ? existingConditions : [existingConditions]),
+        industryFilter,
+      ];
+      delete whereClause[Op.or];
+    } else {
+      Object.assign(whereClause, industryFilter);
     }
+  }
 
-    if (filters?.currentMonth === true) {
-      const currentDate = new Date();
-      const currentMonth = currentDate.getMonth() + 1;
-      const currentYear = currentDate.getFullYear();
+  // 🔹 Existing CURRENT MONTH filter (unchanged)
+  if (filters?.currentMonth === true) {
+    const currentDate = new Date();
+    const currentMonth = currentDate.getMonth() + 1;
+    const currentYear = currentDate.getFullYear();
 
-      const monthFilter = {
-        "$roleData.createdAt$": {
+    const monthFilter = {
+      "$roleData.createdAt$": {
         [Op.and]: [
           Sequelize.literal(`MONTH(\`roleData\`.\`createdAt\`) = ${currentMonth}`),
-          Sequelize.literal(`YEAR(\`roleData\`.\`createdAt\`) = ${currentYear}`)
-        ]
-        }
-      };
+          Sequelize.literal(`YEAR(\`roleData\`.\`createdAt\`) = ${currentYear}`),
+        ],
+      },
+    };
 
-      if (whereClause[Op.and] || whereClause[Op.or]) {
-        const existingConditions = whereClause[Op.and] || whereClause[Op.or];
-        whereClause[Op.and] = [
-          ...(Array.isArray(existingConditions) ? existingConditions : [existingConditions]),
-          monthFilter
-        ];
-        delete whereClause[Op.or];
-      } else {
-        Object.assign(whereClause, monthFilter);
-      }
+    if (whereClause[Op.and] || whereClause[Op.or]) {
+      const existingConditions = whereClause[Op.and] || whereClause[Op.or];
+      whereClause[Op.and] = [
+        ...(Array.isArray(existingConditions) ? existingConditions : [existingConditions]),
+        monthFilter,
+      ];
+      delete whereClause[Op.or];
+    } else {
+      Object.assign(whereClause, monthFilter);
     }
-    
-    const res: any = await users.findAndCountAll({
-      where: { roleId: 1, deletedAt: null, ...whereClause },
-      attributes: ["id", "roleId", "name", "email", "phone", "profileStatus"],
-      include: [
-        {
-          model: roleData,
-          attributes: [
-            "currentSituationId",
-            "accountStatus",
-            "firstName",
-            "lastName",
-            "profile",
-            "industryId",
-            "isApproved",
-            "mutedOn",
-            "suspendedOn",
-          ],
-          required:
-            filters?.type?.includes("verified") ||
-            filters?.type?.includes("unVerified") ||
-            filters?.type?.includes("approved") ||
-            filters?.industryId?.length > 0 ||
-            filters?.chatAvailability ||
-            filters?.currentMonth === true,
+  }
+
+  const res: any = await users.findAndCountAll({
+    where: { deletedAt: null, ...whereClause },
+    attributes: ["id", "roleId", "name", "email", "phone", "profileStatus"],
+    include: [
+      {
+        model: roleData,
+        attributes: [
+          "currentSituationId",
+          "accountStatus",
+          "firstName",
+          "lastName",
+          "profile",
+          "industryId",
+          "isApproved",
+          "mutedOn",
+          "suspendedOn",
+        ],
+        required:
+          filters?.type?.includes("verified") ||
+          filters?.type?.includes("unVerified") ||
+          filters?.type?.includes("approved") ||
+          filters?.industryId?.length > 0 ||
+          filters?.chatAvailability ||
+          filters?.currentMonth === true,
+      },
+      {
+        model: userLog,
+        attributes: [],
+        required: false,
+        as: "userLog",
+      },
+    ],
+    limit: limit,
+    offset: limit * offset,
+    distinct: true,
+  });
+
+  const enhancedRows = await Promise.all(
+    res.rows.map(async (user: any) => {
+      const warningCounts = await userLog.findAll({
+        where: { userId: user.id },
+        attributes: [
+          [Sequelize.fn("COUNT", Sequelize.literal("CASE WHEN isMuted = true THEN 1 END")), "muteCount"],
+          [Sequelize.fn("COUNT", Sequelize.literal("CASE WHEN isSuspend = true THEN 1 END")), "suspendCount"],
+        ],
+        raw: true,
+      });
+
+      const warnings: any = warningCounts[0] || { muteCount: 0, suspendCount: 0 };
+
+      const muteCount = parseInt(warnings.muteCount) || 0;
+      const suspendCount = parseInt(warnings.suspendCount) || 0;
+
+      return {
+        ...user.toJSON(),
+        profilePicture: user.roleData?.profile || null,
+        warnings: {
+          total: muteCount + suspendCount,
+          mute: muteCount,
+          suspend: suspendCount,
         },
-        {
-          model: userLog,
-          attributes: [],
-          required: false,
-          as: "userLog",
-        },
-      ],
-      // order: [["createdAt", "DESC"]],
-      limit: limit,
-      offset: limit * offset,
-      distinct: true,
-    });
-    const enhancedRows = await Promise.all(
-      res.rows.map(async (user: any) => {
-        const warningCounts = await userLog.findAll({
-          where: { userId: user.id },
-          attributes: [
-            [Sequelize.fn('COUNT', Sequelize.literal('CASE WHEN isMuted = true THEN 1 END')), 'muteCount'],
-            [Sequelize.fn('COUNT', Sequelize.literal('CASE WHEN isSuspend = true THEN 1 END')), 'suspendCount']
-          ],
-          raw: true
-        });
+      };
+    })
+  );
 
-        const warnings: any = warningCounts[0] || {
-          muteCount: 0,
-          suspendCount: 0
-        };
+  res.rows = enhancedRows.reverse();
+  return res;
+};
 
-        const muteCount = parseInt(warnings.muteCount) || 0;
-        const suspendCount = parseInt(warnings.suspendCount) || 0;
-
-        return {
-          ...user.toJSON(),
-          profilePicture: user.roleData?.profile || null,
-          warnings: {
-            total: muteCount + suspendCount,
-            mute: muteCount,
-            suspend: suspendCount
-          }
-        };
-      })
-    );
-
-    res.rows = enhancedRows.reverse();
-
-    return res;
-  };
 
   public getAllCompanies = async (data: any): Promise<any> => {
     const { limit, offset, filters } = data;

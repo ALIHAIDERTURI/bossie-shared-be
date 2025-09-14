@@ -102,6 +102,8 @@ export const getAllUsersSchema = Joi.object({
   offset: Joi.number().integer().required(),
   filters: Joi.object({
     type: Joi.string().optional(),
+    role: Joi.string().optional(),     // 👈 Added role
+    status: Joi.string().optional(),   // 👈 Added status
     industryId: Joi.string().optional(),
     search: Joi.string().optional(),
     chatAvailability: Joi.string().optional(),
