@@ -44,6 +44,8 @@ export interface employeeI {
   fcmToken?: string;
   muteReason?: string;
   rejectedBy?: number;
+  appealMessage?: string;
+  hasAppeal?: boolean;
 
 }
 
@@ -182,6 +184,15 @@ export class employee extends Model<employeeI> {
 
   @Column(DataType.STRING)
   public muteReason: string;
+
+  @Column(DataType.TEXT('long'))
+  public appealMessage: string;
+
+  @Column({
+    type: DataType.BOOLEAN,
+    defaultValue: false,
+  })
+  public hasAppeal: boolean;
 }
 
 const getRoleValue = (type: any) => {

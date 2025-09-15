@@ -1,4 +1,4 @@
-// import "module-alias/register";
+import "module-alias/register";
 import express from "express";
 import "./utils/scheduleJobs";
 import cors from "cors";
@@ -11,7 +11,6 @@ import { authenticateUser } from "./shared/middleware/authMiddleware";
 import * as http from "http";
 import { socketRouter } from "./routes/socket.routes";
 const { Server } = require("socket.io");
-
 
 const app = express();
 app.use(express.urlencoded({ extended: true }));
@@ -26,7 +25,6 @@ app.use(cors());
 
 app.use("/api", routes);
 // app.use("/api", routes);
-
 export const server: http.Server = http.createServer(app);
 const io = new Server(server);
 app.use(express.static(path.resolve("./public")));

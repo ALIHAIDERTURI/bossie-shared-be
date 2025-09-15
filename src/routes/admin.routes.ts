@@ -85,6 +85,14 @@ adminRouter.get("/getCompanyEmpInfoById", (...args: [Request, Response]) =>
   adminControler.getCompanyEmpInfoById(...args)
 );
 
+adminRouter.get("/getAllEmployees", (...args: [Request, Response]) =>
+  adminControler.getAllEmployees(...args)
+);
+
+adminRouter.get("/getAllEmployeesDetailed", (...args: [Request, Response]) =>
+  adminControler.getAllEmployeesDetailed(...args)
+);
+
 adminRouter.get("/getEmployeeDetails/:id", (...args: [Request, Response]) =>
   adminControler.getEmployeeDetails(...args)
 );
@@ -153,12 +161,20 @@ adminRouter.get("/getReportedUsersList", (...args: [Request, Response]) =>
   adminControler.getReportedUsersList(...args)
 );
 
+adminRouter.get("/getReportedEmployeesList", (...args: [Request, Response]) =>
+  adminControler.getReportedEmployeesList(...args)
+);
+
 adminRouter.get("/getReportedCompaniesList", (...args: [Request, Response]) =>
   adminControler.getReportedCompaniesList(...args)
 );
 
 adminRouter.get("/getReportedUserDetails/:reportId", (...args: [Request, Response]) =>
   adminControler.getReportedUserDetails(...args)
+);
+
+adminRouter.get("/getReportedEmployeeDetails/:reportId", (...args: [Request, Response]) =>
+  adminControler.getReportedEmployeeDetails(...args)
 );
 
 adminRouter.get("/getReportedCompanyDetails/:reportId", (...args: [Request, Response]) =>
@@ -183,6 +199,10 @@ adminRouter.get("/getCompanyThreads/:companyId", (...args: [Request, Response]) 
 
 adminRouter.post("/approveRejectUser/:userId", (...args: [Request, Response]) =>
   adminControler.approveRejectUser(...args)
+);
+
+adminRouter.post("/approveRejectEmployee/:employeeId", (...args: [Request, Response]) =>
+  adminControler.approveRejectEmployee(...args)
 );
 
 adminRouter.post("/approveRejectCompany/:companyId", (...args: [Request, Response]) =>
@@ -223,6 +243,10 @@ adminRouter.get("/getModeratorPerformanceStats/:moderatorId", (...args: [Request
 
 adminRouter.get("/getUsersAppeals", (...args: [Request, Response]) =>
   adminControler.getUsersAppeals(...args)
+);
+
+adminRouter.get("/getEmployeesAppeals", (...args: [Request, Response]) =>
+  adminControler.getEmployeesAppeals(...args)
 );
 
 adminRouter.get("/getCompaniesAppeals", (...args: [Request, Response]) =>

@@ -2441,28 +2441,72 @@ export class UserService {
   };
 
   public submitAppeal = async (data: any): Promise<any> => {
-    const { userId, appealMessage } = data;
+    const { userId, appealMessage, roleId } = data;
 
-    // Check if user exists
-    const userExists = await users.findOne({
-      where: { id: userId, deletedAt: null }
-    });
-    if (!userExists) {
-      throw new Error("User not found");
+    console.log(`[DEBUG] SubmitAppeal - userId: ${userId}, roleId: ${roleId}, appealMessage: ${appealMessage?.substring(0, 50)}...`);
+
+    switch (roleId) {
+      case 1: // Individual users/entrepreneurs
+      case 2: // Companies
+        console.log(`[DEBUG] Processing ${roleId === 1 ? 'user' : 'company'} appeal`);
+        const userExists = await users.findOne({
+          where: { id: userId, deletedAt: null }
+        });
+        console.log(`[DEBUG] User lookup - Found: ${userExists ? 'Yes' : 'No'}`);
+        
+        if (!userExists) {
+          throw new Error("User not found");
+        }
+
+        console.log(`[DEBUG] User ${userId} - Request roleId: ${roleId}, Database roleId: ${userExists.roleId}`);
+        
+        if (userExists.roleId !== roleId) {
+          throw new Error(`Role ID mismatch. The provided roleId (${roleId}) does not match the user's actual role (${userExists.roleId}).`);
+        }
+
+        if (userExists.appealMessage) {
+          throw new Error("You have already submitted an appeal. Please wait for admin review before submitting another one.");
+        }
+
+        await users.update(
+          { 
+            appealMessage: appealMessage,
+            hasAppeal: true
+          },
+          { where: { id: userId } }
+        );
+        console.log(`[DEBUG] User/Company appeal updated successfully`);
+        break;
+
+      case 3: // Employees
+        console.log(`[DEBUG] Processing employee appeal - Looking for employee with id: ${userId}`);
+        const employeeExists = await employee.findOne({
+          where: { id: userId, deletedAt: null }
+        });
+        console.log(`[DEBUG] Employee found:`, employeeExists ? `ID: ${employeeExists.id}` : 'Not found');
+        if (!employeeExists) {
+          throw new Error("Employee record not found");
+        }
+
+        if (employeeExists.appealMessage) {
+          throw new Error("You have already submitted an appeal. Please wait for admin review before submitting another one.");
+        }
+
+        await employee.update(
+          { 
+            appealMessage: appealMessage, 
+            hasAppeal: true
+          },
+          { where: { id: employeeExists.id } }
+        );
+        console.log(`[DEBUG] Employee appeal updated successfully`);
+        break;
+
+      default:
+        throw new Error(`Invalid role ID: ${roleId}. Supported roles are 1 (users), 2 (companies), and 3 (employees).`);
     }
 
-    if (userExists.appealMessage) {
-      throw new Error("You have already submitted an appeal. Please wait for admin review before submitting another one.");
-    }
-
-    await users.update(
-      { 
-        appealMessage: appealMessage,
-        hasAppeal: true
-      },
-      { where: { id: userId } }
-    );
-
+    console.log(`[DEBUG] Appeal submitted successfully for ${roleId === 1 ? 'user' : roleId === 2 ? 'company' : 'employee'}`);
     return {
       message: "Appeal submitted successfully"
     };

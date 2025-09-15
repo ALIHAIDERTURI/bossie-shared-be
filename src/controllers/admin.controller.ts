@@ -478,6 +478,44 @@ export class AdminController {
     }
   };
 
+  public getAllEmployees = async (req: Request, res: Response) => {
+    try {
+      let message = "All employees fetched successfully.";
+      const response: any = await this.__service.getAllEmployees();
+
+      res.status(200).json({
+        statusCode: 200,
+        message,
+        response,
+      });
+    } catch (error: any) {
+      res.status(403).send({
+        statusCode: 403,
+        message: error.message,
+      });
+    }
+  };
+
+  public getAllEmployeesDetailed = async (req: Request, res: Response) => {
+    try {
+      const { query } = req;
+      const data = await getAllUsersSchema.validateAsync(query);
+      let message = "All employees fetched successfully.";
+      const response: any = await this.__service.getAllEmployeesDetailed(data);
+
+      res.status(200).json({
+        statusCode: 200,
+        message,
+        response,
+      });
+    } catch (error: any) {
+      res.status(403).send({
+        statusCode: 403,
+        message: error.message,
+      });
+    }
+  };
+
   public getEmployeeDetails = async (req: Request, res: Response) => {
     try {
       let message = "Employee details fetched successfully.";
@@ -1002,6 +1040,26 @@ export class AdminController {
     }
   };
 
+  public getReportedEmployeesList = async (req: Request, res: Response) => {
+    try {
+      let message = "Reported employees list fetched successfully.";
+      const { query } = req;
+      const data = await getReportedUsersSchema.validateAsync(query);
+      const response: any = await this.__service.getReportedEmployeesList(data);
+
+      res.status(200).json({
+        statusCode: 200,
+        message,
+        response,
+      });
+    } catch (error: any) {
+      res.status(403).send({
+        statusCode: 403,
+        message: error.message,
+      });
+    }
+  };
+
   public getReportedCompaniesList = async (req: Request, res: Response) => {
     try {
       let message = "Reported companies list fetched successfully.";
@@ -1042,6 +1100,25 @@ export class AdminController {
     }
   };
 
+  public getReportedEmployeeDetails = async (req: Request, res: Response) => {
+    try {
+      let message = "Reported employee details fetched successfully.";
+      const { params } = req;
+      const data = { reportId: parseInt(params.reportId) };
+      const response: any = await this.__service.getReportedEmployeeDetails(data);
+
+      res.status(200).json({
+        statusCode: 200,
+        message,
+        response,
+      });
+    } catch (error: any) {
+      res.status(403).send({
+        statusCode: 403,
+        message: error.message,
+      });
+    }
+  };
   public getReportedCompanyDetails = async (req: Request, res: Response) => {
     try {
       let message = "Reported company details fetched successfully.";
@@ -1173,6 +1250,41 @@ export class AdminController {
         customLog: customLog || null
       };
       const response: any = await this.__service.approveRejectUser(data);
+
+      res.status(200).json({
+        statusCode: 200,
+        message,
+        response,
+      });
+    } catch (error: any) {
+      res.status(403).send({
+        statusCode: 403,
+        message: error.message,
+      });
+    }
+  };
+
+  public approveRejectEmployee = async (req: Request, res: Response) => {
+    try {
+      let message = "Employee request processed successfully.";
+      const { employeeId } = req.params;
+      const { status, rejectionReason, customLog, adminId } = req.body;
+
+      if (!adminId) {
+        return res.status(401).json({
+          statusCode: 401,
+          message: "Admin ID is required",
+        });
+      }
+
+      const data = { 
+        employeeId: parseInt(employeeId), 
+        status: parseInt(status),
+        adminId: adminId,
+        rejectionReason: rejectionReason || null,
+        customLog: customLog || null
+      };
+      const response: any = await this.__service.approveRejectEmployee(data);
 
       res.status(200).json({
         statusCode: 200,
@@ -1449,6 +1561,31 @@ export class AdminController {
       return res.status(200).json({
         statusCode: 200,
         message: "Users appeals fetched successfully.",
+        response,
+      });
+    } catch (error: any) {
+      return res.status(403).json({
+        statusCode: 403,
+        message: error.message,
+      });
+    }
+  };
+
+  public getEmployeesAppeals = async (req: Request, res: Response) => {
+    try {
+      const { error, value } = getUsersAppealsSchema.validate(req.query);
+      if (error) {
+        return res.status(400).json({
+          statusCode: 400,
+          message: error.details[0].message,
+        });
+      }
+
+      const response = await this.__service.getEmployeesAppeals(value);
+
+      return res.status(200).json({
+        statusCode: 200,
+        message: "Employees appeals fetched successfully.",
         response,
       });
     } catch (error: any) {
