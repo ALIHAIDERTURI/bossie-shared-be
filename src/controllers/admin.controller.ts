@@ -33,6 +33,7 @@ import {
   addCustomUserLogSchema,
   getAllCompanyInfoSchema,
   getUsersAppealsSchema,
+  getRegistrationRequestsSchema
 } from "@src/shared/common/validators/admin.validator";
 import { userDefaultSchema } from "@src/shared/common/validators/users.validators";
 
@@ -1482,4 +1483,24 @@ export class AdminController {
       });
     }
   };
+
+  public getRegistrationRequests = async (req: Request, res: Response) => {
+  try {
+    const { query } = req;
+    const validatedData = await getRegistrationRequestsSchema.validateAsync(query);
+    const response = await this.__service.getRegistrationRequests(validatedData);
+
+    res.status(200).json({
+      statusCode: 200,
+      message: "Registration requests fetched successfully.",
+      response,
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      statusCode: 500,
+      message: error.message || "Something went wrong.",
+    });
+  }
+};
+
 }

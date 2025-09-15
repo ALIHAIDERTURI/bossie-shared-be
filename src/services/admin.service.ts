@@ -18,7 +18,7 @@ import {
   userLog,
   userNotification,
   users,
-  moderatorPermissions,
+  moderatorPermissions
 } from "@src/models";
 import { sendPushNotification } from "@src/utils/pushNotification";
 import { getProcessedTemplate } from "@src/utils/renderEmailTemplate";
@@ -949,6 +949,171 @@ export class AdminService {
 
     return res;
   };
+
+
+  
+
+public getRegistrationRequests = async (data: any): Promise<any> => {
+  const { limit, offset, filters } = data;
+
+  // 🔹 Parse industryId safely
+  if (filters?.industryId && typeof filters.industryId === "string") {
+    try {
+      filters.industryId = JSON.parse(filters.industryId);
+    } catch {
+      filters.industryId = [];
+    }
+  }
+
+  let whereClause: any = {};
+
+  // 🔹 ROLE FILTER
+  const roleFilterMap: Record<string, number> = {
+    freelancer: 1,
+    company: 2,
+    employee: 3,
+  };
+  if (filters?.role && roleFilterMap[filters.role]) {
+    whereClause.roleId = roleFilterMap[filters.role];
+  }
+
+  // 🔹 STATUS FILTER
+  const statusFilterMap: Record<string, number> = {
+    'not-submitted': 1,
+    pending: 2,
+    active: 3,
+    declined: 4,
+    'partial-deleted': 5,
+    'video-not-submitted': 6,
+    edit: 7,
+  };
+  if (filters?.status && statusFilterMap[filters.status.toLowerCase()]) {
+    whereClause.profileStatus = statusFilterMap[filters.status.toLowerCase()];
+  }
+
+  // 🔹 SEARCH FILTER
+  if (filters?.search) {
+    const searchTerm = filters.search.trim();
+    whereClause[Op.or] = [
+      { name: { [Op.like]: `%${searchTerm}%` } },
+      { email: { [Op.like]: `%${searchTerm}%` } },
+      { phone: { [Op.like]: `%${searchTerm}%` } },
+      Sequelize.literal(`
+        EXISTS (
+          SELECT 1 FROM roleData 
+          WHERE roleData.userId = users.id
+          AND roleData.deletedAt IS NULL
+          AND (
+            roleData.firstName LIKE '%${searchTerm}%'
+            OR roleData.lastName LIKE '%${searchTerm}%'
+            OR roleData.companyName LIKE '%${searchTerm}%'
+          )
+        )
+      `),
+    ];
+  }
+
+  // 🔹 INDUSTRY FILTER
+  if (filters?.industryId && filters.industryId.length > 0) {
+    whereClause[Op.and] = filters.industryId.map((id: number) =>
+      Sequelize.literal(`JSON_CONTAINS(roleData.industryId, '${id}', '$')`)
+    );
+  }
+
+  // 🔹 Query with Sorting (Latest First)
+  const res: any = await users.findAndCountAll({
+    where: { deletedAt: null, ...whereClause },
+    attributes: ["id", "roleId", "name", "email", "phone", "profileStatus", "createdAt"],
+    include: [
+      {
+        model: roleData,
+        as: "roleData",
+        attributes: [
+          "accountStatus",
+          "firstName",
+          "lastName",
+          "profile",
+          "industryId",
+          "isApproved",
+          "mutedOn",
+          "suspendedOn",
+          "chamberCommerceNumber",
+          "companyName",
+          "createdAt",
+        ],
+        where: { deletedAt: null }, // Ensure roleData is not soft-deleted
+        required: false,
+      },
+      {
+        model: userLog,
+        attributes: [],
+        required: false,
+        as: "userLog",
+      },
+    ],
+    limit,
+    offset: limit * offset,
+    distinct: true,
+    order: [["createdAt", "DESC"]], // Sort newest first
+    subQuery: false,
+  });
+
+  // Updated statusMap to match all profileStatus values
+  const roleMap: Record<number, string> = {
+    1: "freelancer",
+    2: "company",
+    3: "employee",
+  };
+  const statusMap: Record<number, string> = {
+    1: "not-submitted",
+    2: "pending",
+    3: "active",
+    4: "declined",
+    5: "partial-deleted",
+    6: "video-not-submitted",
+    7: "edit",
+  };
+
+  const enhancedRows = await Promise.all(
+    res.rows.map(async (user: any) => {
+      const warningCounts: any[] = await userLog.findAll({
+        where: { userId: user.id },
+        attributes: [
+          [Sequelize.fn("COUNT", Sequelize.literal("CASE WHEN isMuted = true THEN 1 END")), "muteCount"],
+          [Sequelize.fn("COUNT", Sequelize.literal("CASE WHEN isSuspend = true THEN 1 END")), "suspendCount"],
+        ],
+        raw: true,
+      });
+
+      const muteCount = parseInt((warningCounts[0]?.muteCount as string) || "0");
+      const suspendCount = parseInt((warningCounts[0]?.suspendCount as string) || "0");
+      const roleDataObj = user.roleData || {};
+
+      return {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone || null,
+        role: roleMap[user.roleId] || "unknown",
+        status: statusMap[user.profileStatus] || "unknown",
+        profilePicture: roleDataObj.profile || null,
+        chamberCommerceNumber: roleDataObj.chamberCommerceNumber || null,
+        companyName: roleDataObj.companyName || null,
+        joinedAt: roleDataObj.createdAt || null,
+        dataSubmittedAt: user.createdAt || null,
+        warnings: {
+          total: muteCount + suspendCount,
+          mute: muteCount,
+          suspend: suspendCount,
+        },
+      };
+    })
+  );
+
+  res.rows = enhancedRows;
+  return res;
+};
+
 
   public getAllCompanies = async (data: any): Promise<any> => {
     const { limit, offset, filters } = data;

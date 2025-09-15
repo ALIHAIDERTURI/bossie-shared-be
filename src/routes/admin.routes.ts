@@ -228,3 +228,7 @@ adminRouter.get("/getUsersAppeals", (...args: [Request, Response]) =>
 adminRouter.get("/getCompaniesAppeals", (...args: [Request, Response]) =>
   adminControler.getCompaniesAppeals(...args)
 );
+
+adminRouter.get("/getRegistrationRequests", (...args: [Request, Response]) =>
+  adminControler.getRegistrationRequests(...args)
+);

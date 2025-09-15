@@ -237,3 +237,16 @@ export const getUsersAppealsSchema = Joi.object({
   ).optional(),
   hasAppeal: Joi.boolean().optional(),
 });
+
+
+export const getRegistrationRequestsSchema = Joi.object({
+  limit: Joi.number().integer().required(),
+  offset: Joi.number().integer().required(),
+  filters: Joi.object({
+    role: Joi.string().valid("freelancer", "company", "employee").optional(),
+    status: Joi.string().valid("active", "declined").optional(),
+    search: Joi.string().optional(),
+  })
+    .allow("")
+    .optional(),
+});
