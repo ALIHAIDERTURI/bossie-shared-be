@@ -33,7 +33,8 @@ import {
   addCustomUserLogSchema,
   getAllCompanyInfoSchema,
   getUsersAppealsSchema,
-  getRegistrationRequestsSchema
+  getRegistrationRequestsSchema,
+  getProfileUpdateRequestsSchema
 } from "@src/shared/common/validators/admin.validator";
 import { userDefaultSchema } from "@src/shared/common/validators/users.validators";
 
@@ -1639,5 +1640,23 @@ export class AdminController {
     });
   }
 };
+
+public getProfileUpdateRequests = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const validated = await getProfileUpdateRequestsSchema.validateAsync(req.query, { abortEarly: false });
+    const result = await this.__service.getProfileUpdateRequests(validated);
+    res.status(200).json({
+      statusCode: 200,
+      message: "Profile update requests fetched successfully.",
+      response: result,
+    });
+  } catch (error: any) {
+    res.status(400).json({
+      statusCode: 400,
+      message: error.message || "Validation error",
+    });
+  }
+};
+
 
 }

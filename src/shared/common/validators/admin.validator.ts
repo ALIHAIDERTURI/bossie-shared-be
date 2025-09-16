@@ -250,3 +250,17 @@ export const getRegistrationRequestsSchema = Joi.object({
     .allow("")
     .optional(),
 });
+
+
+export const getProfileUpdateRequestsSchema = Joi.object({
+  limit: Joi.number().integer().min(1).default(10),
+  offset: Joi.number().integer().min(0).default(0),
+  filters: Joi.object({
+    role: Joi.string().valid("freelancer", "company", "employee").optional(),
+    search: Joi.string().optional(),
+    industryId: Joi.alternatives().try(
+      Joi.array().items(Joi.number()),
+      Joi.string()
+    ).optional(),
+  }).optional(),
+});

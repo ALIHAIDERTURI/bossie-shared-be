@@ -1403,6 +1403,145 @@ public getRegistrationRequests = async (data: any): Promise<any> => {
   return res;
 };
 
+public getProfileUpdateRequests = async (data: any): Promise<any> => {
+  const { limit, offset, filters } = data;
+
+  // 🔹 Parse industryId safely
+  if (filters?.industryId && typeof filters.industryId === "string") {
+    try {
+      filters.industryId = JSON.parse(filters.industryId);
+    } catch {
+      filters.industryId = [];
+    }
+  }
+
+  let whereClause: any = {};
+
+  // 🔹 ROLE FILTER
+  const roleFilterMap: Record<string, number> = {
+    freelancer: 1,
+    company: 2,
+    employee: 3,
+  };
+  if (filters?.role && roleFilterMap[filters.role]) {
+    whereClause.roleId = roleFilterMap[filters.role];
+  }
+
+  // 🔹 SEARCH FILTER
+  if (filters?.search) {
+    const searchTerm = filters.search.trim();
+    whereClause[Op.or] = [
+      { name: { [Op.like]: `%${searchTerm}%` } },
+      { email: { [Op.like]: `%${searchTerm}%` } },
+      { phone: { [Op.like]: `%${searchTerm}%` } },
+      Sequelize.literal(`
+        EXISTS (
+          SELECT 1 FROM roleData 
+          WHERE roleData.userId = users.id
+          AND (
+            roleData.firstName LIKE '%${searchTerm}%'
+            OR roleData.lastName LIKE '%${searchTerm}%'
+            OR roleData.companyName LIKE '%${searchTerm}%'
+          )
+        )
+      `),
+    ];
+  }
+
+  // 🔹 INDUSTRY FILTER
+  if (filters?.industryId && filters.industryId.length > 0) {
+    whereClause[Op.and] = filters.industryId.map((id: number) =>
+      Sequelize.literal(`JSON_CONTAINS(roleData.industryId, '${id}', '$')`)
+    );
+  }
+
+  // 🔹 Query with Sorting
+  const res: any = await users.findAndCountAll({
+    where: { deletedAt: null, ...whereClause },
+    attributes: ["id", "roleId", "name", "email", "phone", "createdAt"],
+    include: [
+      {
+        model: roleData,
+        attributes: [
+          "currentSituationId",
+          "accountStatus",
+          "firstName",
+          "lastName",
+          "profile",
+          "industryId",
+          "isApproved",
+          "mutedOn",
+          "suspendedOn",
+          "chamberCommerceNumber",
+          "companyName",
+          "createdAt",
+        ],
+        required: false,
+      },
+      {
+        model: userLog,
+        attributes: [],
+        required: false,
+      },
+    ],
+    limit,
+    offset: limit * offset,
+    distinct: true,
+    order: [["createdAt", "DESC"]],
+    subQuery: false,
+  });
+
+  const roleMap: Record<number, string> = {
+    1: "freelancer",
+    2: "company",
+    3: "employee",
+  };
+
+  const enhancedRows = await Promise.all(
+    res.rows.map(async (user: any) => {
+      // Fetch warning counts
+      const warningCounts: any[] = await userLog.findAll({
+        where: { userId: user.id },
+        attributes: [
+          [Sequelize.fn("COUNT", Sequelize.literal("CASE WHEN isMuted = true THEN 1 END")), "muteCount"],
+          [Sequelize.fn("COUNT", Sequelize.literal("CASE WHEN isSuspend = true THEN 1 END")), "suspendCount"],
+        ],
+        raw: true,
+      });
+
+      const muteCount = parseInt((warningCounts[0]?.muteCount as string) || "0");
+      const suspendCount = parseInt((warningCounts[0]?.suspendCount as string) || "0");
+      const roleDataObj = user.roleData || {};
+
+      return {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone || null,
+        role: roleMap[user.roleId as keyof typeof roleMap] || "unknown",
+        profilePicture: roleDataObj.profile || null,
+        chamberCommerceNumber: roleDataObj.chamberCommerceNumber || null,
+        companyName: roleDataObj.companyName || null,
+        currentSituation: roleDataObj.currentSituationId || null,
+        joinedAt: roleDataObj.createdAt || null,
+        dataSubmittedAt: user.createdAt || null,
+        warnings: {
+          total: muteCount + suspendCount,
+          mute: muteCount,
+          suspend: suspendCount,
+        },
+      };
+    })
+  );
+
+  res.rows = enhancedRows;
+  return res;
+};
+
+
+
+
+
   // public getAllEmployeesDetailed = async (data: any): Promise<any> => {
   //   const { limit, offset, filters } = data;
 
