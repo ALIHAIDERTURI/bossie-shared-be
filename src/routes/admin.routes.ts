@@ -256,3 +256,7 @@ adminRouter.get("/getCompaniesAppeals", (...args: [Request, Response]) =>
 adminRouter.get("/getRegistrationRequests", (...args: [Request, Response]) =>
   adminControler.getRegistrationRequests(...args)
 );
+
+adminRouter.get("/getProfileUpdateRequests", (...args: [Request, Response]) =>
+  adminControler.getRegistrationRequests(...args)
+);
