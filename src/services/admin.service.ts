@@ -3887,47 +3887,49 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
   }
   
   const employeeInfo = await employee.findOne({
-    where: { id: employeeId, deletedAt: null },
-    attributes: [
-      "id",
-      "userId",
-      "profile",
-      "firstName",
-      "lastName",
-      "currentSituationId",
-      "currentSituationName",
-      "email",
-      "phone",
-      "profileStatus",
-      "accountStatus",
-      "isApproved",
-      "rejectionReason",
-      "appealMessage",
-      "hasAppeal",
-      "createdAt",
-      "updatedAt",
-      "suspendedOn",
-      "mutedOn",
-      "suspendReason",
-      "muteReason"
-    ],
-    include: [
-      {
-        model: users,
-        as: "users",
-        attributes: ["id", "roleId", "name", "lastLogin"], // 👈 Added lastLogin
-        required: false,
-        include: [
-          {
-            model: roleData,
-            as: "roleData",
-            attributes: ["id", "companyName", "city", "province", "website"],
-            required: false
-          }
-        ]
-      }
-    ]
-  });
+  where: { id: employeeId, deletedAt: null },
+  attributes: [
+    "id",
+    "userId",
+    "profile",
+    "firstName",
+    "lastName",
+    "currentSituationId",
+    "currentSituationName",
+    "email",
+    "phone",
+    "profileStatus",
+    "accountStatus",
+    "isApproved",
+    "rejectionReason",
+    "appealMessage",
+    "hasAppeal",
+    "createdAt",
+    "updatedAt",
+    "suspendedOn",
+    "mutedOn",
+    "suspendReason",
+    "muteReason",
+    "roleId",   // 👈 added
+  ],
+  include: [
+    {
+      model: users,
+      as: "users",
+      attributes: ["id", "roleId", "name", "lastLogin"],
+      required: false,
+      include: [
+        {
+          model: roleData,
+          as: "roleData",
+          attributes: ["id", "companyName", "city", "province", "website"],
+          required: false
+        }
+      ]
+    }
+  ]
+});
+
 
   if (!employeeInfo) {
     throw new Error(`Employee with ID ${employeeId} does not exist or has been deleted`);
@@ -6499,137 +6501,158 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
   };
 
   public getReportedUserDetails = async (data: any): Promise<any> => {
-    const { reportId } = data;
+  const { reportId } = data;
 
-    const reportItem = await report.findOne({
-      where: { id: reportId, deletedAt: null },
+  const reportItem = await report.findOne({
+    where: { id: reportId, deletedAt: null },
+    attributes: [
+      "id",
+      "userId",
+      "roleId",
+      "reportedUserId",
+      "reportedRoleId",
+      "problem",
+      "createdAt"
+    ]
+  });
+
+  if (!reportItem) {
+    throw new Error("Report not found");
+  }
+
+  let reportedUserInfo = null;
+  if (reportItem.reportedRoleId === 3) {
+    const reportedEmployee = await employee.findOne({
+      where: { id: reportItem.reportedUserId, deletedAt: null },
       attributes: [
         "id",
         "userId",
-        "roleId",
-        "reportedUserId",
-        "reportedRoleId",
-        "problem",
-        "createdAt"
+        "firstName",
+        "lastName",
+        "profile",
+        "email",
+        "phone",
+        "roleId"   // 👈 added
+      ],
+      include: [
+        {
+          model: users,
+          as: "users",
+          include: [
+            {
+              model: roleData,
+              as: "roleData",
+              required: false
+            }
+          ],
+          required: false
+        }
       ]
     });
 
-    if (!reportItem) {
-      throw new Error("Report not found");
+    if (reportedEmployee) {
+      reportedUserInfo = {
+        ...reportedEmployee.toJSON(),
+        users: reportedEmployee.users ? {
+          ...(reportedEmployee.users as any).toJSON(),
+          roleData: (reportedEmployee.users as any).roleData || null
+        } : null
+      };
     }
+  } else {
+    const reportedUser = await users.findOne({
+      where: { id: reportItem.reportedUserId, deletedAt: null },
+      include: [
+        {
+          model: roleData,
+          as: "roleData",
+          required: false
+        }
+      ]
+    });
 
-    let reportedUserInfo = null;
-    if (reportItem.reportedRoleId === 3) {
-      const reportedEmployee = await employee.findOne({
-        where: { id: reportItem.reportedUserId, deletedAt: null },
-        include: [
-          {
-            model: users,
-            as: "users",
-            include: [
-              {
-                model: roleData,
-                as: "roleData",
-                required: false
-              }
-            ],
-            required: false
-          }
-        ]
-      });
-
-      if (reportedEmployee) {
-        reportedUserInfo = {
-          ...reportedEmployee.toJSON(),
-          users: reportedEmployee.users ? {
-            ...(reportedEmployee.users as any).toJSON(),
-            roleData: (reportedEmployee.users as any).roleData || null
-          } : null
-        };
-      }
-    } else {
-      const reportedUser = await users.findOne({
-        where: { id: reportItem.reportedUserId, deletedAt: null },
-        include: [
-          {
-            model: roleData,
-            as: "roleData",
-            required: false
-          }
-        ]
-      });
-
-      if (reportedUser) {
-        reportedUserInfo = {
-          ...reportedUser.toJSON(),
-          roleData: reportedUser.roleData || null
-        };
-      }
+    if (reportedUser) {
+      reportedUserInfo = {
+        ...reportedUser.toJSON(),
+        roleData: reportedUser.roleData || null
+      };
     }
+  }
 
-    let reporterInfo = null;
-    if (reportItem.roleId === 3) {
-      const reporterEmployee = await employee.findOne({
-        where: { id: reportItem.userId, deletedAt: null },
-        include: [
-          {
-            model: users,
-            as: "users",
-            include: [
-              {
-                model: roleData,
-                as: "roleData",
-                required: false
-              }
-            ],
-            required: false
-          }
-        ]
-      });
+  let reporterInfo = null;
+  if (reportItem.roleId === 3) {
+    const reporterEmployee = await employee.findOne({
+      where: { id: reportItem.userId, deletedAt: null },
+      attributes: [
+        "id",
+        "userId",
+        "firstName",
+        "lastName",
+        "profile",
+        "email",
+        "phone",
+        "roleId"   // 👈 added
+      ],
+      include: [
+        {
+          model: users,
+          as: "users",
+          include: [
+            {
+              model: roleData,
+              as: "roleData",
+              required: false
+            }
+          ],
+          required: false
+        }
+      ]
+    });
 
-      if (reporterEmployee) {
-        reporterInfo = {
-          ...reporterEmployee.toJSON(),
-          users: reporterEmployee.users ? {
-            ...(reporterEmployee.users as any).toJSON(),
-            roleData: (reporterEmployee.users as any).roleData || null
-          } : null
-        };
-      }
-    } else {
-      const reporterUser = await users.findOne({
-        where: { id: reportItem.userId, deletedAt: null },
-        include: [
-          {
-            model: roleData,
-            as: "roleData",
-            required: false
-          }
-        ]
-      });
-
-      if (reporterUser) {
-        reporterInfo = {
-          ...reporterUser.toJSON(),
-          roleData: reporterUser.roleData || null
-        };
-      }
+    if (reporterEmployee) {
+      reporterInfo = {
+        ...reporterEmployee.toJSON(),
+        users: reporterEmployee.users ? {
+          ...(reporterEmployee.users as any).toJSON(),
+          roleData: (reporterEmployee.users as any).roleData || null
+        } : null
+      };
     }
+  } else {
+    const reporterUser = await users.findOne({
+      where: { id: reportItem.userId, deletedAt: null },
+      include: [
+        {
+          model: roleData,
+          as: "roleData",
+          required: false
+        }
+      ]
+    });
 
-    const reportedUserToxicity = await this.toxicityService.getUserToxicityScore(reportItem.reportedUserId, reportItem.reportedRoleId);
-    const reporterToxicity = await this.toxicityService.getUserToxicityScore(reportItem.userId, reportItem.roleId);
+    if (reporterUser) {
+      reporterInfo = {
+        ...reporterUser.toJSON(),
+        roleData: reporterUser.roleData || null
+      };
+    }
+  }
 
-    return {
-      ...reportItem.toJSON(),
-      reportedUser: reportedUserInfo || null,
-      reporter: reporterInfo || null,
-      problem: reportItem.problem,
-      toxicityScores: {
-        reportedUser: reportedUserToxicity?.toxicityScore || 0,
-        reporter: reporterToxicity?.toxicityScore || 0
-      }
-    };
+  const reportedUserToxicity = await this.toxicityService.getUserToxicityScore(reportItem.reportedUserId, reportItem.reportedRoleId);
+  const reporterToxicity = await this.toxicityService.getUserToxicityScore(reportItem.userId, reportItem.roleId);
+
+  return {
+    ...reportItem.toJSON(),
+    reportedUser: reportedUserInfo || null,
+    reporter: reporterInfo || null,
+    problem: reportItem.problem,
+    toxicityScores: {
+      reportedUser: reportedUserToxicity?.toxicityScore || 0,
+      reporter: reporterToxicity?.toxicityScore || 0
+    }
   };
+};
+
 
   public getReportedEmployeeDetails = async (data: any): Promise<any> => {
     const { reportId } = data;
@@ -6747,33 +6770,91 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
   };
 
   public getReportedCompanyDetails = async (data: any): Promise<any> => {
-    const { reportId } = data;
+  const { reportId } = data;
 
-    const reportItem = await report.findOne({
-      where: { id: reportId, deletedAt: null },
+  const reportItem = await report.findOne({
+    where: { id: reportId, deletedAt: null },
+    attributes: [
+      "id",
+      "userId",
+      "roleId",
+      "reportedUserId",
+      "reportedRoleId",
+      "problem",
+      "createdAt"
+    ]
+  });
+
+  if (!reportItem) {
+    throw new Error("Report not found");
+  }
+
+  // Verify this is a company report
+  if (reportItem.reportedRoleId !== 2) {
+    throw new Error("This report is not for a company");
+  }
+
+  let reportedCompanyInfo = null;
+  const reportedCompany = await users.findOne({
+    where: { id: reportItem.reportedUserId, roleId: 2, deletedAt: null },
+    include: [
+      {
+        model: roleData,
+        as: "roleData",
+        required: false
+      }
+    ]
+  });
+
+  if (reportedCompany) {
+    reportedCompanyInfo = {
+      ...reportedCompany.toJSON(),
+      roleData: reportedCompany.roleData || null
+    };
+  }
+
+  let reporterInfo = null;
+  if (reportItem.roleId === 3) {
+    const reporterEmployee = await employee.findOne({
+      where: { id: reportItem.userId, deletedAt: null },
       attributes: [
         "id",
         "userId",
-        "roleId",
-        "reportedUserId",
-        "reportedRoleId",
-        "problem",
-        "createdAt"
+        "firstName",
+        "lastName",
+        "profile",
+        "email",
+        "phone",
+        "roleId"   // 👈 added
+      ],
+      include: [
+        {
+          model: users,
+          as: "users",
+          include: [
+            {
+              model: roleData,
+              as: "roleData",
+              required: false
+            }
+          ],
+          required: false
+        }
       ]
     });
 
-    if (!reportItem) {
-      throw new Error("Report not found");
+    if (reporterEmployee) {
+      reporterInfo = {
+        ...reporterEmployee.toJSON(),
+        users: reporterEmployee.users ? {
+          ...(reporterEmployee.users as any).toJSON(),
+          roleData: (reporterEmployee.users as any).roleData || null
+        } : null
+      };
     }
-
-    // Verify this is a company report
-    if (reportItem.reportedRoleId !== 2) {
-      throw new Error("This report is not for a company");
-    }
-
-    let reportedCompanyInfo = null;
-    const reportedCompany = await users.findOne({
-      where: { id: reportItem.reportedUserId, roleId: 2, deletedAt: null },
+  } else {
+    const reporterUser = await users.findOne({
+      where: { id: reportItem.userId, deletedAt: null },
       include: [
         {
           model: roleData,
@@ -6783,76 +6864,30 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
       ]
     });
 
-    if (reportedCompany) {
-      reportedCompanyInfo = {
-        ...reportedCompany.toJSON(),
-        roleData: reportedCompany.roleData || null
+    if (reporterUser) {
+      reporterInfo = {
+        ...reporterUser.toJSON(),
+        roleData: reporterUser.roleData || null
       };
     }
+  }
 
-    let reporterInfo = null;
-    if (reportItem.roleId === 3) {
-      const reporterEmployee = await employee.findOne({
-        where: { id: reportItem.userId, deletedAt: null },
-        include: [
-          {
-            model: users,
-            as: "users",
-            include: [
-              {
-                model: roleData,
-                as: "roleData",
-                required: false
-              }
-            ],
-            required: false
-          }
-        ]
-      });
+  const reportedCompanyToxicity = await this.toxicityService.getUserToxicityScore(reportItem.reportedUserId, reportItem.reportedRoleId);
+  const reporterToxicity = await this.toxicityService.getUserToxicityScore(reportItem.userId, reportItem.roleId);
 
-      if (reporterEmployee) {
-        reporterInfo = {
-          ...reporterEmployee.toJSON(),
-          users: reporterEmployee.users ? {
-            ...(reporterEmployee.users as any).toJSON(),
-            roleData: (reporterEmployee.users as any).roleData || null
-          } : null
-        };
-      }
-    } else {
-      const reporterUser = await users.findOne({
-        where: { id: reportItem.userId, deletedAt: null },
-        include: [
-          {
-            model: roleData,
-            as: "roleData",
-            required: false
-          }
-        ]
-      });
-
-      if (reporterUser) {
-        reporterInfo = {
-          ...reporterUser.toJSON(),
-          roleData: reporterUser.roleData || null
-        };
-      }
+  return {
+    ...reportItem.toJSON(),
+    reportedCompany: reportedCompanyInfo || null,
+    reporter: reporterInfo || null,
+    problem: reportItem.problem,
+    toxicityScores: {
+      reportedCompany: reportedCompanyToxicity?.toxicityScore || 0,
+      reporter: reporterToxicity?.toxicityScore || 0
     }
-
-    const reportedCompanyToxicity = await this.toxicityService.getUserToxicityScore(reportItem.reportedUserId, reportItem.reportedRoleId);
-    const reporterToxicity = await this.toxicityService.getUserToxicityScore(reportItem.userId, reportItem.roleId);
-
-    return {
-      ...reportItem.toJSON(),
-      reportedCompany: reportedCompanyInfo || null,
-      reporter: reporterInfo || null,
-      problem: reportItem.problem,
-      toxicityScores: {
-        reportedCompany: reportedCompanyToxicity?.toxicityScore || 0,
-        reporter: reporterToxicity?.toxicityScore || 0
-      }
-    };
   };
+};
+
+
 
   public getReportedUsers = async (data: any): Promise<any> => {
     const { limit, offset, search } = data;
