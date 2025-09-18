@@ -1,5 +1,6 @@
 import { sequelize } from "@src/config/database";
 import AWS from "aws-sdk";
+import { addDays } from "date-fns";
 
 import {
   admin,
@@ -2110,92 +2111,129 @@ export class UserService {
   };
 
   public getAppStatus = async (data: any): Promise<any> => {
-    const { userId, roleId } = data;
-    let employeeCount: any;
-    if (roleId == 3) {
-      const employeeData: any = await employee.findOne({
-        where: { id: userId }, raw: true
-      });
-      const compData: any = await roleData.findOne({ where: { userId: employeeData.userId }, attributes: ["companyName"], raw: true })
+  const { userId, roleId } = data;
+  let employeeCount: any;
 
-      const response = {
-        id: employeeData.id,
-        name: employeeData.firstName + " " + employeeData.lastName,
-        firstName: employeeData.firstName,
-        lastName: employeeData.lastName,
-        email: employeeData.email,
-        profile: employeeData.profile,
-        phone: employeeData.phone,
-        currentSituationId: employeeData.currentSituationId,
-        currentSituationName: employeeData.currentSituationName,
-        isApproved: employeeData.isApproved,
-        status: employeeData.profileStatus,
-        firstTimeLogin: employeeData.firstTimeLogin,
-        roleId: 3,
-        roleData: {
-          accountStatus: employeeData.accountStatus,
-          mutedOn: employeeData.mutedOn,
-          suspendedOn: employeeData.suspendedOn,
-          suspendedDays: employeeData.suspendedDays,
-          mutedDays: employeeData.mutedDays,
-        },
-        companyData: {
-          id: employeeData.userId,
-          companyName: compData.companyName,
-          chamberCommerceNumber: compData.chamberCommerceNumber,
-          roleId: 2
-        }
-      };
-      return response;
-    }
-    const userData: any = await users.findOne({
+  // === CASE: EMPLOYEE ===
+  if (roleId == 3) {
+    const employeeData: any = await employee.findOne({
       where: { id: userId },
-      include: [
-        {
-          as: "roleData",
-          model: roleData,
-          attributes: { exclude: ["updatedAt, deletedAt"] },
-        },
-      ],
+      raw: true,
     });
 
-    if (!userData) {
-      throw new Error("Gebruiker bestaat niet.");
+    if (!employeeData) {
+      throw new Error("Employee not found");
     }
 
-    if (userData && userData.roleData) {
-      const cleanedRoleData = { ...userData.roleData.dataValues }; // Assuming dataValues holds the roleData properties
-      Object.keys(cleanedRoleData).forEach((key) => {
-        if (cleanedRoleData[key] === null) {
-          delete cleanedRoleData[key];
-        }
-      });
-      userData.roleData = cleanedRoleData;
-    }
+    const compData: any = await roleData.findOne({
+      where: { userId: employeeData.userId },
+      attributes: ["companyName", "chamberCommerceNumber"],
+      raw: true,
+    });
 
-    if (userData.roleId == 2) {
-      employeeCount = await employee.count({ where: { userId: userData.id } });
-    }
+    // ✅ Fix: convert string → Date, then addDays
+    const suspendUntil =
+      employeeData.suspendedOn && employeeData.suspendedDays
+        ? addDays(new Date(employeeData.suspendedOn), employeeData.suspendedDays)
+        : null;
 
-    return {
-      id: userData?.id,
-      name: userData?.name,
-      email: userData?.email,
-      emailVerified: userData?.emailVerified,
-      roleId: userData?.roleId,
-      status: userData?.profileStatus,
-      // isVideoSubmitted: userData?.roleData?.isVideoSubmitted,
-      // profileId: userData?.roleData?.id,
-      // profile: userData?.roleData?.profile,
-      // profileName: userData?.roleData?.companyName
-      //   ? userData?.roleData?.companyName
-      //   : `${userData?.roleData?.firstName} ${userData?.roleData?.lastName}`,
-      firstTimeLogin: userData?.firstTimeLogin,
-      rejectionReason: userData?.rejectionReason,
-      roleData: userData?.roleData,
-      employeeCount: employeeCount,
+    const muteUntil =
+      employeeData.mutedOn && employeeData.mutedDays
+        ? addDays(new Date(employeeData.mutedOn), employeeData.mutedDays)
+        : null;
+
+    const response = {
+      id: employeeData.id,
+      name: employeeData.firstName + " " + employeeData.lastName,
+      firstName: employeeData.firstName,
+      lastName: employeeData.lastName,
+      email: employeeData.email,
+      profile: employeeData.profile,
+      phone: employeeData.phone,
+      currentSituationId: employeeData.currentSituationId,
+      currentSituationName: employeeData.currentSituationName,
+      isApproved: employeeData.isApproved,
+      status: employeeData.profileStatus,
+      firstTimeLogin: employeeData.firstTimeLogin,
+      roleId: 3,
+      roleData: {
+        accountStatus: employeeData.accountStatus,
+        mutedOn: employeeData.mutedOn,
+        suspendedOn: employeeData.suspendedOn,
+        suspendUntil,
+        muteUntil,
+      },
+      companyData: {
+        id: employeeData.userId,
+        companyName: compData?.companyName || null,
+        chamberCommerceNumber: compData?.chamberCommerceNumber || null,
+        roleId: 2,
+      },
     };
+    return response;
+  }
+
+  // === CASE: COMPANY / FREELANCER / OTHERS ===
+  const userData: any = await users.findOne({
+    where: { id: userId },
+    include: [
+      {
+        as: "roleData",
+        model: roleData,
+        attributes: { exclude: ["updatedAt", "deletedAt"] },
+      },
+    ],
+  });
+
+  if (!userData) {
+    throw new Error("Gebruiker bestaat niet.");
+  }
+
+  if (userData && userData.roleData) {
+    const cleanedRoleData = { ...userData.roleData.dataValues };
+    Object.keys(cleanedRoleData).forEach((key) => {
+      if (cleanedRoleData[key] === null) {
+        delete cleanedRoleData[key];
+      }
+    });
+
+    // ✅ Fix for non-employee users too
+    const suspendUntil =
+      cleanedRoleData.suspendedOn && cleanedRoleData.suspendedDays
+        ? addDays(new Date(cleanedRoleData.suspendedOn), cleanedRoleData.suspendedDays)
+        : null;
+
+    const muteUntil =
+      cleanedRoleData.mutedOn && cleanedRoleData.mutedDays
+        ? addDays(new Date(cleanedRoleData.mutedOn), cleanedRoleData.mutedDays)
+        : null;
+
+    cleanedRoleData.suspendUntil = suspendUntil;
+    cleanedRoleData.muteUntil = muteUntil;
+
+    userData.roleData = cleanedRoleData;
+  }
+
+  if (userData.roleId == 2) {
+    employeeCount = await employee.count({ where: { userId: userData.id } });
+  }
+
+  return {
+    id: userData?.id,
+    name: userData?.name,
+    email: userData?.email,
+    emailVerified: userData?.emailVerified,
+    roleId: userData?.roleId,
+    status: userData?.profileStatus,
+    firstTimeLogin: userData?.firstTimeLogin,
+    rejectionReason: userData?.rejectionReason,
+    roleData: userData?.roleData,
+    employeeCount,
   };
+};
+
+
+
 
   public saveToken = async (data: any): Promise<any> => {
     const { token, userId, roleId } = data;

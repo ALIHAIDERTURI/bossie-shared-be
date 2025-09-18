@@ -193,6 +193,15 @@ export class employee extends Model<employeeI> {
     defaultValue: false,
   })
   public hasAppeal: boolean;
+
+@Column({
+  type: DataType.INTEGER,
+  defaultValue: 3,
+})
+public roleId: number;
+
+
+
 }
 
 const getRoleValue = (type: any) => {

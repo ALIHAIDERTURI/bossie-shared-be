@@ -2338,201 +2338,189 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
   };
 
   public getCompanyDetails = async (data: any): Promise<any> => {
-    const { id } = data;  
-    const companyInfo = await users.findOne({
-      where: { id: id, roleId: 2, deletedAt: null }, // Changed to roleId: 2 for companies
-      attributes: [
-        "id",
-        "roleId",
-        "name",
-        "email",
-        "phone",
-        "profileStatus",
-        "rejectionReason",
-        "emailVerified",
-        "appealMessage",
-        "createdAt",
-        "updatedAt"
-      ],
-      include: [
-        {
-          model: roleData,
-          as: "roleData",
-          attributes: [
-            "id",
-            "firstName",
-            "lastName",
-            "chamberCommerceNumber",
-            "currentSituationId",
-            "industryId",
-            "about",
-            "createdAt",
-            "profile",
-            "accountStatus",
-            "isVideoSubmitted",
-            "video",
-            "title",
-            "companyName",
-            "hourlyRate",
-            "city",
-            "province",
-            "website",
-            "postalCode",
-            "houseName",
-            "streetName"
-          ],
-          required: false
-        },
-      ],
-    });
-
-    if (!companyInfo) {
-      throw new Error("Company not found");
-    }
-    const companyRoleData = companyInfo.roleData as any;
-    const field = "userId"; // Companies use userId field
-    const warningCounts = await userLog.findAll({
-      where: { [field]: id },
-      attributes: [
-        [Sequelize.fn('COUNT', Sequelize.literal('CASE WHEN isMuted = true THEN 1 END')), 'muteCount'],
-        [Sequelize.fn('COUNT', Sequelize.literal('CASE WHEN isSuspend = true THEN 1 END')), 'suspendCount']
-      ],
-      raw: true
-    });
-
-    const warnings: any = warningCounts[0] || {
-      muteCount: 0,
-      suspendCount: 0
-    };
-
-    const latestMute = await userLog.findOne({
-      where: { [field]: id, isMuted: true },
-      include: [
-        {
-          model: admin,
-          as: "mute",
-          attributes: ["id", "name", "adminRoleId"],
-          required: false
-        }
-      ],
-      order: [['createdAt', 'DESC']]
-    });
-
-    const latestSuspend = await userLog.findOne({
-      where: { [field]: id, isSuspend: true },
-      include: [
-        {
-          model: admin,
-          as: "suspend",
-          attributes: ["id", "name", "adminRoleId"],
-          required: false
-        }
-      ],
-      order: [['createdAt', 'DESC']]
-    });
-
-    const companyLogs = await this.getUserLogInfo({ userId: id, roleId: companyInfo.roleId });
-
-    let originalReason = null;
-    if (companyInfo.appealMessage) {
-      const isCurrentlySuspended = companyRoleData?.suspendedOn !== null;
-      const isCurrentlyMuted = companyRoleData?.mutedOn !== null;
-
-      if (isCurrentlySuspended) {
-        const originalSuspension = await userLog.findOne({
-          where: {
-            userId: id,
-            isSuspend: true,
-            deletedAt: null
-          },
-          attributes: ["suspendReason", "createdAt"],
-          order: [["createdAt", "DESC"]]
-        });
-        originalReason = originalSuspension?.suspendReason || null;
-      } else if (isCurrentlyMuted) {
-        const originalMute = await userLog.findOne({
-          where: {
-            userId: id,
-            isMuted: true,
-            deletedAt: null
-          },
-          attributes: ["muteReason", "createdAt"],
-          order: [["createdAt", "DESC"]]
-        });
-        originalReason = originalMute?.muteReason || null;
-      } else {
-        const latestSuspension = await userLog.findOne({
-          where: {
-            userId: id,
-            isSuspend: true,
-            deletedAt: null
-          },
-          attributes: ["suspendReason", "createdAt"],
-          order: [["createdAt", "DESC"]]
-        });
-
-        const latestMute = await userLog.findOne({
-          where: {
-            userId: id,
-            isMuted: true,
-            deletedAt: null
-          },
-          attributes: ["muteReason", "createdAt"],
-          order: [["createdAt", "DESC"]]
-        });
-
-        if (latestSuspension && latestMute) {
-          if (latestSuspension.createdAt > latestMute.createdAt) {
-            originalReason = latestSuspension.suspendReason;
-          } else {
-            originalReason = latestMute.muteReason;
-          }
-        } else if (latestSuspension) {
-          originalReason = latestSuspension.suspendReason;
-        } else if (latestMute) {
-          originalReason = latestMute.muteReason;
-        }
-      }
-      if (!originalReason) {
-        const anyRecentLog = await userLog.findOne({
-          where: {
-            userId: id,
-            deletedAt: null,
-            [Op.or]: [
-              { suspendReason: { [Op.ne]: "" } },
-              { muteReason: { [Op.ne]: "" } }
-            ]
-          },
-          attributes: ["suspendReason", "muteReason"],
-          order: [["createdAt", "DESC"]]
-        });
-        
-        if (anyRecentLog) {
-          originalReason = anyRecentLog.suspendReason || anyRecentLog.muteReason;
-        }
-      }
-    }
-
-    return {
-      ...companyInfo.toJSON(),
-      roleData: companyRoleData || null,
-      appeal: {
-        message: companyInfo.appealMessage || null,
-        originalReason: originalReason
+  const { id } = data;  
+  const companyInfo = await users.findOne({
+    where: { id: id, roleId: 2, deletedAt: null }, // roleId: 2 for companies
+    attributes: [
+      "id",
+      "roleId",
+      "name",
+      "email",
+      "phone",
+      "profileStatus",
+      "rejectionReason",
+      "emailVerified",
+      "appealMessage",
+      "createdAt",
+      "updatedAt",
+      "lastLogin"   // 👈 Added here
+    ],
+    include: [
+      {
+        model: roleData,
+        as: "roleData",
+        attributes: [
+          "id",
+          "firstName",
+          "lastName",
+          "chamberCommerceNumber",
+          "currentSituationId",
+          "industryId",
+          "about",
+          "createdAt",
+          "profile",
+          "accountStatus",
+          "isVideoSubmitted",
+          "video",
+          "title",
+          "companyName",
+          "hourlyRate",
+          "city",
+          "province",
+          "website",
+          "postalCode",
+          "houseName",
+          "streetName"
+        ],
+        required: false
       },
-      warnings: {
-        muted: {
-          count: parseInt(warnings.muteCount) || 0,
-          admin: latestMute?.mute ? (latestMute.mute as any).toJSON() : null
-        },
-        suspended: {
-          count: parseInt(warnings.suspendCount) || 0,
-          admin: latestSuspend?.suspend ? (latestSuspend.suspend as any).toJSON() : null
-        }
-      },
-      logs: companyLogs
-    };
+    ],
+  });
+
+  if (!companyInfo) {
+    throw new Error("Company not found");
+  }
+
+  const companyRoleData = companyInfo.roleData as any;
+  const field = "userId"; // Companies use userId field
+
+  const warningCounts = await userLog.findAll({
+    where: { [field]: id },
+    attributes: [
+      [Sequelize.fn('COUNT', Sequelize.literal('CASE WHEN isMuted = true THEN 1 END')), 'muteCount'],
+      [Sequelize.fn('COUNT', Sequelize.literal('CASE WHEN isSuspend = true THEN 1 END')), 'suspendCount']
+    ],
+    raw: true
+  });
+
+  const warnings: any = warningCounts[0] || {
+    muteCount: 0,
+    suspendCount: 0
   };
+
+  const latestMute = await userLog.findOne({
+    where: { [field]: id, isMuted: true },
+    include: [
+      {
+        model: admin,
+        as: "mute",
+        attributes: ["id", "name", "adminRoleId"],
+        required: false
+      }
+    ],
+    order: [['createdAt', 'DESC']]
+  });
+
+  const latestSuspend = await userLog.findOne({
+    where: { [field]: id, isSuspend: true },
+    include: [
+      {
+        model: admin,
+        as: "suspend",
+        attributes: ["id", "name", "adminRoleId"],
+        required: false
+      }
+    ],
+    order: [['createdAt', 'DESC']]
+  });
+
+  const companyLogs = await this.getUserLogInfo({ userId: id, roleId: companyInfo.roleId });
+
+  let originalReason = null;
+  if (companyInfo.appealMessage) {
+    const isCurrentlySuspended = companyRoleData?.suspendedOn !== null;
+    const isCurrentlyMuted = companyRoleData?.mutedOn !== null;
+
+    if (isCurrentlySuspended) {
+      const originalSuspension = await userLog.findOne({
+        where: { userId: id, isSuspend: true, deletedAt: null },
+        attributes: ["suspendReason", "createdAt"],
+        order: [["createdAt", "DESC"]]
+      });
+      originalReason = originalSuspension?.suspendReason || null;
+    } else if (isCurrentlyMuted) {
+      const originalMute = await userLog.findOne({
+        where: { userId: id, isMuted: true, deletedAt: null },
+        attributes: ["muteReason", "createdAt"],
+        order: [["createdAt", "DESC"]]
+      });
+      originalReason = originalMute?.muteReason || null;
+    } else {
+      const latestSuspension = await userLog.findOne({
+        where: { userId: id, isSuspend: true, deletedAt: null },
+        attributes: ["suspendReason", "createdAt"],
+        order: [["createdAt", "DESC"]]
+      });
+
+      const latestMute = await userLog.findOne({
+        where: { userId: id, isMuted: true, deletedAt: null },
+        attributes: ["muteReason", "createdAt"],
+        order: [["createdAt", "DESC"]]
+      });
+
+      if (latestSuspension && latestMute) {
+        originalReason = latestSuspension.createdAt > latestMute.createdAt
+          ? latestSuspension.suspendReason
+          : latestMute.muteReason;
+      } else if (latestSuspension) {
+        originalReason = latestSuspension.suspendReason;
+      } else if (latestMute) {
+        originalReason = latestMute.muteReason;
+      }
+    }
+
+    if (!originalReason) {
+      const anyRecentLog = await userLog.findOne({
+        where: {
+          userId: id,
+          deletedAt: null,
+          [Op.or]: [
+            { suspendReason: { [Op.ne]: "" } },
+            { muteReason: { [Op.ne]: "" } }
+          ]
+        },
+        attributes: ["suspendReason", "muteReason"],
+        order: [["createdAt", "DESC"]]
+      });
+      
+      if (anyRecentLog) {
+        originalReason = anyRecentLog.suspendReason || anyRecentLog.muteReason;
+      }
+    }
+  }
+
+  return {
+    ...companyInfo.toJSON(),
+    roleData: companyRoleData || null,
+    appeal: {
+      message: companyInfo.appealMessage || null,
+      originalReason: originalReason
+    },
+    warnings: {
+      muted: {
+        count: parseInt(warnings.muteCount) || 0,
+        admin: latestMute?.mute ? (latestMute.mute as any).toJSON() : null
+      },
+      suspended: {
+        count: parseInt(warnings.suspendCount) || 0,
+        admin: latestSuspend?.suspend ? (latestSuspend.suspend as any).toJSON() : null
+      }
+    },
+    logs: companyLogs
+  };
+};
+
+
   public getUserInfoById = async (data: any): Promise<any> => {
     const { id } = data;
 
@@ -3881,303 +3869,211 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
   };
 
   public getEmployeeDetails = async (data: any): Promise<any> => {
-    const { employeeId } = data;
-    
-    console.log(`[DEBUG] Processing employee ${employeeId}`);
-    
-    // First check if employee exists at all
-    const basicCheck = await employee.findOne({
-      where: { id: employeeId },
-      attributes: ["id", "deletedAt", "userId"]
-    });
-    
-    console.log(`[DEBUG] Basic check result for employee ${employeeId}:`, basicCheck ? {
-      id: basicCheck.id,
-      deletedAt: basicCheck.deletedAt,
-      userId: basicCheck.userId
-    } : 'Not found');
-    
-    if (!basicCheck) {
-      throw new Error(`Employee with ID ${employeeId} does not exist`);
-    }
-    
-    if (basicCheck.deletedAt) {
-      throw new Error(`Employee found but has been deleted on ${basicCheck.deletedAt}`);
-    }
-    
-    // Get employee basic info
-    console.log(`[DEBUG] Starting main query for employee ${employeeId}`);
-    const employeeInfo = await employee.findOne({
-      where: { id: employeeId, deletedAt: null },
-      attributes: [
-        "id",
-        "userId",
-        "profile",
-        "firstName",
-        "lastName",
-        "currentSituationId",
-        "currentSituationName",
-        "email",
-        "phone",
-        "profileStatus",
-        "accountStatus",
-        "isApproved",
-        "rejectionReason",
-        "appealMessage",
-        "hasAppeal",
-        "createdAt",
-        "updatedAt",
-        "suspendedOn",
-        "mutedOn",
-        "suspendReason",
-        "muteReason"
-      ],
+  const { employeeId } = data;
+  
+  console.log(`[DEBUG] Processing employee ${employeeId}`);
+  
+  const basicCheck = await employee.findOne({
+    where: { id: employeeId },
+    attributes: ["id", "deletedAt", "userId"]
+  });
+  
+  if (!basicCheck) {
+    throw new Error(`Employee with ID ${employeeId} does not exist`);
+  }
+  
+  if (basicCheck.deletedAt) {
+    throw new Error(`Employee found but has been deleted on ${basicCheck.deletedAt}`);
+  }
+  
+  const employeeInfo = await employee.findOne({
+  where: { id: employeeId, deletedAt: null },
+  attributes: [
+    "id",
+    "userId",
+    "profile",
+    "firstName",
+    "lastName",
+    "currentSituationId",
+    "currentSituationName",
+    "email",
+    "phone",
+    "profileStatus",
+    "accountStatus",
+    "isApproved",
+    "rejectionReason",
+    "appealMessage",
+    "hasAppeal",
+    "createdAt",
+    "updatedAt",
+    "suspendedOn",
+    "mutedOn",
+    "suspendReason",
+    "muteReason",
+    "roleId",   // 👈 added
+  ],
+  include: [
+    {
+      model: users,
+      as: "users",
+      attributes: ["id", "roleId", "name", "lastLogin"],
+      required: false,
       include: [
         {
-          model: users,
-          as: "users",
-          attributes: ["id", "roleId", "name"],
-          required: false,
-          include: [
-            {
-              model: roleData,
-              as: "roleData",
-              attributes: ["id", "companyName", "city", "province", "website"],
-              required: false
-            }
-          ]
+          model: roleData,
+          as: "roleData",
+          attributes: ["id", "companyName", "city", "province", "website"],
+          required: false
         }
       ]
-    });
-    
-    console.log(`[DEBUG] Main query completed for employee ${employeeId}:`, employeeInfo ? 'Found' : 'Not found');
+    }
+  ]
+});
 
-    if (!employeeInfo) {
-      // Check if employee exists but is deleted
-      const deletedEmployee = await employee.findOne({
-        where: { id: employeeId },
-        attributes: ["id", "deletedAt"]
+
+  if (!employeeInfo) {
+    throw new Error(`Employee with ID ${employeeId} does not exist or has been deleted`);
+  }
+
+  const companyName = (employeeInfo.users as any)?.roleData?.companyName || "Unknown Company";
+
+  const employeeLogs = await this.getUserLogInfo({ 
+    userId: employeeInfo.id, 
+    roleId: 3
+  });
+
+  const threadsCreated = await threads.findAndCountAll({
+    where: { ownerEmpId: employeeId, deletedAt: null },
+    attributes: ["id", "title", "description", "createdAt", "locked", "typeId"],
+    include: [
+      { model: forumCategory, as: "forumCategory", attributes: ["id", "name"], required: false },
+      { model: forumSubCategory, as: "forumSubCategory", attributes: ["id", "name"], required: false }
+    ],
+    order: [["createdAt", "DESC"]],
+    limit: 10
+  });
+
+  const privateThreadsCreated = await privateThreads.findAndCountAll({
+    where: { ownerEmpId: employeeId, deletedAt: null },
+    attributes: ["id", "title", "createdAt"],
+    order: [["createdAt", "DESC"]],
+    limit: 10
+  });
+
+  const warningCounts = await userLog.findAll({
+    where: { employeeId: employeeId },
+    attributes: [
+      [Sequelize.fn('COUNT', Sequelize.literal('CASE WHEN isMuted = true THEN 1 END')), 'muteCount'],
+      [Sequelize.fn('COUNT', Sequelize.literal('CASE WHEN isSuspend = true THEN 1 END')), 'suspendCount']
+    ],
+    raw: true
+  });
+
+  const warnings: any = warningCounts[0] || { muteCount: 0, suspendCount: 0 };
+
+  const latestMute = await userLog.findOne({
+    where: { employeeId: employeeId, isMuted: true },
+    include: [{ model: admin, as: "mute", attributes: ["id", "name", "adminRoleId"], required: false }],
+    order: [['createdAt', 'DESC']]
+  });
+
+  const latestSuspend = await userLog.findOne({
+    where: { employeeId: employeeId, isSuspend: true },
+    include: [{ model: admin, as: "suspend", attributes: ["id", "name", "adminRoleId"], required: false }],
+    order: [['createdAt', 'DESC']]
+  });
+
+  const allThreads = threadsCreated.rows.map((thread: any) => ({
+    threadId: thread.id,
+    threadName: thread.title,
+    threadPath: `${thread.forumCategory?.name || 'Unknown'} > ${thread.forumSubCategory?.name || 'Unknown'}`
+  }));
+
+  let originalReason = null;
+  if (employeeInfo.appealMessage) {
+    const isCurrentlySuspended = employeeInfo.suspendedOn !== null;
+    const isCurrentlyMuted = employeeInfo.mutedOn !== null;
+
+    if (isCurrentlySuspended) {
+      const originalSuspension = await userLog.findOne({
+        where: { employeeId: employeeId, isSuspend: true, deletedAt: null },
+        attributes: ["suspendReason", "createdAt"],
+        order: [["createdAt", "DESC"]]
+      });
+      originalReason = originalSuspension?.suspendReason || null;
+    } else if (isCurrentlyMuted) {
+      const originalMute = await userLog.findOne({
+        where: { employeeId: employeeId, isMuted: true, deletedAt: null },
+        attributes: ["muteReason", "createdAt"],
+        order: [["createdAt", "DESC"]]
+      });
+      originalReason = originalMute?.muteReason || null;
+    } else {
+      const latestSuspension = await userLog.findOne({
+        where: { employeeId: employeeId, isSuspend: true, deletedAt: null },
+        attributes: ["suspendReason", "createdAt"],
+        order: [["createdAt", "DESC"]]
+      });
+
+      const latestMute = await userLog.findOne({
+        where: { employeeId: employeeId, isMuted: true, deletedAt: null },
+        attributes: ["muteReason", "createdAt"],
+        order: [["createdAt", "DESC"]]
+      });
+
+      if (latestSuspension && latestMute) {
+        originalReason = latestSuspension.createdAt > latestMute.createdAt
+          ? latestSuspension.suspendReason
+          : latestMute.muteReason;
+      } else if (latestSuspension) {
+        originalReason = latestSuspension.suspendReason;
+      } else if (latestMute) {
+        originalReason = latestMute.muteReason;
+      }
+    }
+
+    if (!originalReason) {
+      const anyRecentLog = await userLog.findOne({
+        where: {
+          employeeId: employeeId,
+          deletedAt: null,
+          [Op.or]: [
+            { suspendReason: { [Op.ne]: "" } },
+            { muteReason: { [Op.ne]: "" } }
+          ]
+        },
+        attributes: ["suspendReason", "muteReason"],
+        order: [["createdAt", "DESC"]]
       });
       
-      if (deletedEmployee) {
-        throw new Error(`Employee found but has been deleted on ${deletedEmployee.deletedAt}`);
-      } else {
-        throw new Error(`Employee with ID ${employeeId} does not exist`);
+      if (anyRecentLog) {
+        originalReason = anyRecentLog.suspendReason || anyRecentLog.muteReason;
       }
     }
+  }
 
-    const companyName = (employeeInfo.users as any)?.roleData?.companyName || "Unknown Company";
-    console.log(`[DEBUG] Company name for employee ${employeeId}:`, companyName);
-
-    // Get employee logs
-    console.log(`[DEBUG] Getting logs for employee ${employeeInfo}`);
-    const employeeLogs = await this.getUserLogInfo({ 
-      userId: employeeInfo.id, 
-      roleId: 3, // Employee role
-      // employeeId: employeeId 
-    });
-    console.log(`[DEBUG] Logs retrieved for employee ${employeeId}:`, employeeLogs ? 'Success' : 'Failed');
-
-    // Get threads created by this employee
-    console.log(`[DEBUG] Getting threads for employee ${employeeId}`);
-    const threadsCreated = await threads.findAndCountAll({
-      where: { 
-        ownerEmpId: employeeId,
-        deletedAt: null 
+  return {
+    ...employeeInfo.toJSON(),
+    companyName,
+    logs: employeeLogs,
+    threads: allThreads,
+    appeal: {
+      message: employeeInfo.appealMessage || null,
+      originalReason: originalReason
+    },
+    warnings: {
+      muted: {
+        count: parseInt(warnings.muteCount) || 0,
+        admin: latestMute?.mute ? (latestMute.mute as any).toJSON() : null
       },
-      attributes: [
-        "id",
-        "title",
-        "description",
-        "createdAt",
-        "locked",
-        "typeId"
-      ],
-      include: [
-        {
-          model: forumCategory,
-          as: "forumCategory",
-          attributes: ["id", "name"],
-          required: false
-        },
-        {
-          model: forumSubCategory,
-          as: "forumSubCategory", 
-          attributes: ["id", "name"],
-          required: false
-        }
-      ],
-      order: [["createdAt", "DESC"]],
-      limit: 10
-    });
-    console.log(`[DEBUG] Threads retrieved for employee ${employeeId}:`, threadsCreated.count, 'threads');
-
-    // Get private threads created by this employee
-    const privateThreadsCreated = await privateThreads.findAndCountAll({
-      where: { 
-        ownerEmpId: employeeId,
-        deletedAt: null 
-      },
-      attributes: [
-        "id",
-        "title",
-        "createdAt"
-      ],
-      order: [["createdAt", "DESC"]],
-      limit: 10
-    });
-
-    // Get warning counts
-    const warningCounts = await userLog.findAll({
-      where: { employeeId: employeeId },
-      attributes: [
-        [Sequelize.fn('COUNT', Sequelize.literal('CASE WHEN isMuted = true THEN 1 END')), 'muteCount'],
-        [Sequelize.fn('COUNT', Sequelize.literal('CASE WHEN isSuspend = true THEN 1 END')), 'suspendCount']
-      ],
-      raw: true
-    });
-
-    const warnings: any = warningCounts[0] || {
-      muteCount: 0,
-      suspendCount: 0
-    };
-
-    // Get latest mute and suspend actions
-    const latestMute = await userLog.findOne({
-      where: { employeeId: employeeId, isMuted: true },
-      include: [
-        {
-          model: admin,
-          as: "mute",
-          attributes: ["id", "name", "adminRoleId"],
-          required: false
-        }
-      ],
-      order: [['createdAt', 'DESC']]
-    });
-
-    const latestSuspend = await userLog.findOne({
-      where: { employeeId: employeeId, isSuspend: true },
-      include: [
-        {
-          model: admin,
-          as: "suspend",
-          attributes: ["id", "name", "adminRoleId"],
-          required: false
-        }
-      ],
-      order: [['createdAt', 'DESC']]
-    });
-
-    // Format threads as flat array (public only)
-    const allThreads = threadsCreated.rows.map((thread: any) => ({
-      threadId: thread.id,
-      threadName: thread.title,
-      threadPath: `${thread.forumCategory?.name || 'Unknown'} > ${thread.forumSubCategory?.name || 'Unknown'}`
-    }));
-
-    // Get appeal information
-    let originalReason = null;
-    if (employeeInfo.appealMessage) {
-      const isCurrentlySuspended = employeeInfo.suspendedOn !== null;
-      const isCurrentlyMuted = employeeInfo.mutedOn !== null;
-
-      if (isCurrentlySuspended) {
-        const originalSuspension = await userLog.findOne({
-          where: {
-            employeeId: employeeId,
-            isSuspend: true,
-            deletedAt: null
-          },
-          attributes: ["suspendReason", "createdAt"],
-          order: [["createdAt", "DESC"]]
-        });
-        originalReason = originalSuspension?.suspendReason || null;
-      } else if (isCurrentlyMuted) {
-        const originalMute = await userLog.findOne({
-          where: {
-            employeeId: employeeId,
-            isMuted: true,
-            deletedAt: null
-          },
-          attributes: ["muteReason", "createdAt"],
-          order: [["createdAt", "DESC"]]
-        });
-        originalReason = originalMute?.muteReason || null;
-      } else {
-        const latestSuspension = await userLog.findOne({
-          where: {
-            employeeId: employeeId,
-            isSuspend: true,
-            deletedAt: null
-          },
-          attributes: ["suspendReason", "createdAt"],
-          order: [["createdAt", "DESC"]]
-        });
-
-        const latestMute = await userLog.findOne({
-          where: {
-            employeeId: employeeId,
-            isMuted: true,
-            deletedAt: null
-          },
-          attributes: ["muteReason", "createdAt"],
-          order: [["createdAt", "DESC"]]
-        });
-
-        if (latestSuspension && latestMute) {
-          if (latestSuspension.createdAt > latestMute.createdAt) {
-            originalReason = latestSuspension.suspendReason;
-          } else {
-            originalReason = latestMute.muteReason;
-          }
-        } else if (latestSuspension) {
-          originalReason = latestSuspension.suspendReason;
-        } else if (latestMute) {
-          originalReason = latestMute.muteReason;
-        }
-      }
-      if (!originalReason) {
-        const anyRecentLog = await userLog.findOne({
-          where: {
-            employeeId: employeeId,
-            deletedAt: null,
-            [Op.or]: [
-              { suspendReason: { [Op.ne]: "" } },
-              { muteReason: { [Op.ne]: "" } }
-            ]
-          },
-          attributes: ["suspendReason", "muteReason"],
-          order: [["createdAt", "DESC"]]
-        });
-        
-        if (anyRecentLog) {
-          originalReason = anyRecentLog.suspendReason || anyRecentLog.muteReason;
-        }
+      suspended: {
+        count: parseInt(warnings.suspendCount) || 0,
+        admin: latestSuspend?.suspend ? (latestSuspend.suspend as any).toJSON() : null
       }
     }
-
-    return {
-      ...employeeInfo.toJSON(),
-      companyName,
-      logs: employeeLogs,
-      threads: allThreads,
-      appeal: {
-        message: employeeInfo.appealMessage || null,
-        originalReason: originalReason
-      },
-      warnings: {
-        muted: {
-          count: parseInt(warnings.muteCount) || 0,
-          admin: latestMute?.mute ? (latestMute.mute as any).toJSON() : null
-        },
-        suspended: {
-          count: parseInt(warnings.suspendCount) || 0,
-          admin: latestSuspend?.suspend ? (latestSuspend.suspend as any).toJSON() : null
-        }
-      }
-    };
   };
+};
+
 
   public updateModeratorStatus = async (
     data: any,
@@ -5867,181 +5763,168 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
   };
 
   public getEmployeesAppeals = async (data: any) => {
-    try {
-      const {
-        limit = 10,
-        offset = 0,
-        search = "",
-        status = [],
-        hasAppeal = null,
-      } = data;
+  try {
+    const {
+      limit = 10,
+      offset = 0,
+      search = "",
+      status = [],
+      hasAppeal = null,
+    } = data;
 
-      const whereClause: any = {
-        deletedAt: null,
-        hasAppeal: true, // Only employees with appeals
-      };
+    const whereClause: any = {
+      deletedAt: null,
+      hasAppeal: true, // Only employees with appeals
+    };
 
-      const statusArray = Array.isArray(status) ? status : (status ? [status] : []);
-      
-      // Build search conditions
-      const searchConditions: any[] = [];
-      if (search && search.trim()) {
-        searchConditions.push(
-          { firstName: { [Op.like]: `%${search.trim()}%` } },
-          { lastName: { [Op.like]: `%${search.trim()}%` } },
-          { email: { [Op.like]: `%${search.trim()}%` } },
-          { phone: { [Op.like]: `%${search.trim()}%` } }
-        );
-      }
-      
-      // Build status conditions
-      const statusConditions: any[] = [];
-      if (statusArray.length > 0) {
-        statusArray.forEach((statusType: string) => {
-          switch (statusType.toLowerCase()) {
-            case "active":
-              statusConditions.push({ accountStatus: 1 });
-              break;
-            case "suspended":
-              statusConditions.push({ accountStatus: 3 });
-              break;
-            case "muted":
-              statusConditions.push({ accountStatus: 4 });
-              break;
-            case "unavailable":
-              statusConditions.push({ accountStatus: 2 });
-              break;
+    const statusArray = Array.isArray(status) ? status : (status ? [status] : []);
+
+    // Build search conditions
+    const searchConditions: any[] = [];
+    if (search && search.trim()) {
+      searchConditions.push(
+        { firstName: { [Op.like]: `%${search.trim()}%` } },
+        { lastName: { [Op.like]: `%${search.trim()}%` } },
+        { email: { [Op.like]: `%${search.trim()}%` } },
+        { phone: { [Op.like]: `%${search.trim()}%` } }
+      );
+    }
+
+    // Build status conditions
+    const statusConditions: any[] = [];
+    if (statusArray.length > 0) {
+      statusArray.forEach((statusType: string) => {
+        switch (statusType.toLowerCase()) {
+          case "active":
+            statusConditions.push({ accountStatus: 1 });
+            break;
+          case "suspended":
+            statusConditions.push({ accountStatus: 3 });
+            break;
+          case "muted":
+            statusConditions.push({ accountStatus: 4 });
+            break;
+          case "unavailable":
+            statusConditions.push({ accountStatus: 2 });
+            break;
+        }
+      });
+    }
+
+    if (searchConditions.length > 0 || statusConditions.length > 0) {
+      whereClause[Op.and] = [];
+      if (searchConditions.length > 0) whereClause[Op.and].push({ [Op.or]: searchConditions });
+      if (statusConditions.length > 0) whereClause[Op.and].push({ [Op.or]: statusConditions });
+    }
+
+    if (hasAppeal !== null) {
+      whereClause.hasAppeal = !!hasAppeal;
+    }
+
+    const includeArray: any[] = [
+      {
+        model: users,
+        as: "users",
+        required: false,
+        attributes: ["id", "name", "roleId"],
+        include: [
+          {
+            model: roleData,
+            as: "roleData",
+            required: false,
+            attributes: ["companyName", "profile"]
           }
+        ]
+      }
+    ];
+
+    const { count: totalCount, rows: employeesList } = await employee.findAndCountAll({
+      where: whereClause,
+      include: includeArray,
+      limit: parseInt(limit),
+      offset: parseInt(offset),
+      order: [["createdAt", "DESC"]],
+      attributes: [
+        "id",
+        "userId",
+        "firstName",
+        "lastName",
+        "email",
+        "phone",
+        "profile",
+        "accountStatus",
+        "hasAppeal",
+        "createdAt"
+      ],
+    });
+
+    const employeesWithWarnings = await Promise.all(
+      employeesList.map(async (emp: any) => {
+        const muteCount = await userLog.count({
+          where: {
+            employeeId: emp.id,
+            isMuted: true,
+            deletedAt: null,
+          },
         });
-      }
 
-      // Combine search and status conditions
-      const combinedConditions: any[] = [];
-      if (searchConditions.length > 0) {
-        combinedConditions.push({ [Op.or]: searchConditions });
-      }
-      if (statusConditions.length > 0) {
-        combinedConditions.push({ [Op.or]: statusConditions });
-      }
+        const suspendCount = await userLog.count({
+          where: {
+            employeeId: emp.id,
+            isSuspend: true,
+            deletedAt: null,
+          },
+        });
 
-      if (combinedConditions.length > 0) {
-        whereClause[Op.and] = combinedConditions;
-      }
+        let currentStatus = "active";
+        if (emp.accountStatus === 3) currentStatus = "suspended";
+        else if (emp.accountStatus === 4) currentStatus = "muted";
 
-      if (hasAppeal !== null) {
-        if (hasAppeal === true) {
-          whereClause.hasAppeal = true;
-        } else if (hasAppeal === false) {
-          whereClause.hasAppeal = false;
-        }
-      }
+        return {
+          id: emp.id,
+          userId: emp.userId,
+          firstName: emp.firstName,
+          lastName: emp.lastName,
+          name: `${emp.firstName} ${emp.lastName}`,
+          profile: emp.profile || null, // ✅ fixed here
+          phone: emp.phone,
+          email: emp.email,
+          status: currentStatus,
+          accountStatus: emp.accountStatus, // ✅ added
+          warnings: {
+            total: muteCount + suspendCount,
+            mute: muteCount,
+            suspend: suspendCount,
+          },
+          hasAppeal: emp.hasAppeal || false,
+          appeal: {
+            message: null,
+            originalReason: null
+          },
+          createdAt: emp.createdAt,
+          companyName: emp.users?.roleData?.companyName || "Unknown Company",
+          userInfo: emp.users || null,
+        };
+      })
+    );
 
-      const includeArray: any[] = [
-        {
-          model: users,
-          as: "users",
-          required: false,
-          attributes: ["id", "name", "roleId"],
-          include: [
-            {
-              model: roleData,
-              as: "roleData",
-              required: false,
-              attributes: ["companyName", "profile"]
-            }
-          ]
-        }
-      ];
+    const totalPages = Math.ceil(totalCount / limit);
 
-      const { count: totalCount, rows: employeesList } = await employee.findAndCountAll({
-        where: whereClause,
-        include: includeArray,
+    return {
+      employees: employeesWithWarnings,
+      pagination: {
         limit: parseInt(limit),
         offset: parseInt(offset),
-        order: [["createdAt", "DESC"]],
-        attributes: [
-          "id",
-          "userId",
-          "firstName",
-          "lastName",
-          "email",
-          "phone",
-          "profile",
-          "accountStatus",
-          "hasAppeal",
-          "createdAt"
-        ],
-      });
+        totalCount,
+        totalPages,
+        currentPage: Math.floor(offset / limit) + 1,
+      },
+    };
+  } catch (error) {
+    throw error;
+  }
+};
 
-      const employeesWithWarnings = await Promise.all(
-        employeesList.map(async (emp: any) => {
-          const muteCount = await userLog.count({
-            where: {
-              employeeId: emp.id,
-              isMuted: true,
-              deletedAt: null,
-            },
-          });
-
-          const suspendCount = await userLog.count({
-            where: {
-              employeeId: emp.id,
-              isSuspend: true,
-              deletedAt: null,
-            },
-          });
-        
-          let currentStatus = "active";
-          // Use accountStatus to determine current status
-          if (emp.accountStatus === 3) {
-            currentStatus = "suspended";
-          } else if (emp.accountStatus === 4) {
-            currentStatus = "muted";
-          }
-
-          return {
-            id: emp.id,
-            userId: emp.userId,
-            firstName: emp.firstName,
-            lastName: emp.lastName,
-            name: `${emp.firstName} ${emp.lastName}`,
-            profilePicture: emp.profile || null,
-            phone: emp.phone,
-            email: emp.email,
-            status: currentStatus,
-            warnings: {
-              total: muteCount + suspendCount,
-              mute: muteCount,
-              suspend: suspendCount,
-            },
-            hasAppeal: emp.hasAppeal || false,
-            appeal: {
-              message: null, // Will be null until appealMessage column is added to database
-              originalReason: null // We'll need to determine this based on suspension/mute status
-            },
-            createdAt: emp.createdAt,
-            companyName: emp.users?.roleData?.companyName || "Unknown Company",
-            userInfo: emp.users || null,
-          };
-        })
-      );
-
-      const totalPages = Math.ceil(totalCount / limit);
-
-      return {
-        employees: employeesWithWarnings,
-        pagination: {
-          limit: parseInt(limit),
-          offset: parseInt(offset),
-          totalCount,
-          totalPages,
-          currentPage: Math.floor(offset / limit) + 1,
-        },
-      };
-    } catch (error) {
-      throw error;
-    }
-  };
 
   public getCompaniesAppeals = async (data: any) => {
     try {
@@ -6605,137 +6488,158 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
   };
 
   public getReportedUserDetails = async (data: any): Promise<any> => {
-    const { reportId } = data;
+  const { reportId } = data;
 
-    const reportItem = await report.findOne({
-      where: { id: reportId, deletedAt: null },
+  const reportItem = await report.findOne({
+    where: { id: reportId, deletedAt: null },
+    attributes: [
+      "id",
+      "userId",
+      "roleId",
+      "reportedUserId",
+      "reportedRoleId",
+      "problem",
+      "createdAt"
+    ]
+  });
+
+  if (!reportItem) {
+    throw new Error("Report not found");
+  }
+
+  let reportedUserInfo = null;
+  if (reportItem.reportedRoleId === 3) {
+    const reportedEmployee = await employee.findOne({
+      where: { id: reportItem.reportedUserId, deletedAt: null },
       attributes: [
         "id",
         "userId",
-        "roleId",
-        "reportedUserId",
-        "reportedRoleId",
-        "problem",
-        "createdAt"
+        "firstName",
+        "lastName",
+        "profile",
+        "email",
+        "phone",
+        "roleId"   // 👈 added
+      ],
+      include: [
+        {
+          model: users,
+          as: "users",
+          include: [
+            {
+              model: roleData,
+              as: "roleData",
+              required: false
+            }
+          ],
+          required: false
+        }
       ]
     });
 
-    if (!reportItem) {
-      throw new Error("Report not found");
+    if (reportedEmployee) {
+      reportedUserInfo = {
+        ...reportedEmployee.toJSON(),
+        users: reportedEmployee.users ? {
+          ...(reportedEmployee.users as any).toJSON(),
+          roleData: (reportedEmployee.users as any).roleData || null
+        } : null
+      };
     }
+  } else {
+    const reportedUser = await users.findOne({
+      where: { id: reportItem.reportedUserId, deletedAt: null },
+      include: [
+        {
+          model: roleData,
+          as: "roleData",
+          required: false
+        }
+      ]
+    });
 
-    let reportedUserInfo = null;
-    if (reportItem.reportedRoleId === 3) {
-      const reportedEmployee = await employee.findOne({
-        where: { id: reportItem.reportedUserId, deletedAt: null },
-        include: [
-          {
-            model: users,
-            as: "users",
-            include: [
-              {
-                model: roleData,
-                as: "roleData",
-                required: false
-              }
-            ],
-            required: false
-          }
-        ]
-      });
-
-      if (reportedEmployee) {
-        reportedUserInfo = {
-          ...reportedEmployee.toJSON(),
-          users: reportedEmployee.users ? {
-            ...(reportedEmployee.users as any).toJSON(),
-            roleData: (reportedEmployee.users as any).roleData || null
-          } : null
-        };
-      }
-    } else {
-      const reportedUser = await users.findOne({
-        where: { id: reportItem.reportedUserId, deletedAt: null },
-        include: [
-          {
-            model: roleData,
-            as: "roleData",
-            required: false
-          }
-        ]
-      });
-
-      if (reportedUser) {
-        reportedUserInfo = {
-          ...reportedUser.toJSON(),
-          roleData: reportedUser.roleData || null
-        };
-      }
+    if (reportedUser) {
+      reportedUserInfo = {
+        ...reportedUser.toJSON(),
+        roleData: reportedUser.roleData || null
+      };
     }
+  }
 
-    let reporterInfo = null;
-    if (reportItem.roleId === 3) {
-      const reporterEmployee = await employee.findOne({
-        where: { id: reportItem.userId, deletedAt: null },
-        include: [
-          {
-            model: users,
-            as: "users",
-            include: [
-              {
-                model: roleData,
-                as: "roleData",
-                required: false
-              }
-            ],
-            required: false
-          }
-        ]
-      });
+  let reporterInfo = null;
+  if (reportItem.roleId === 3) {
+    const reporterEmployee = await employee.findOne({
+      where: { id: reportItem.userId, deletedAt: null },
+      attributes: [
+        "id",
+        "userId",
+        "firstName",
+        "lastName",
+        "profile",
+        "email",
+        "phone",
+        "roleId"   // 👈 added
+      ],
+      include: [
+        {
+          model: users,
+          as: "users",
+          include: [
+            {
+              model: roleData,
+              as: "roleData",
+              required: false
+            }
+          ],
+          required: false
+        }
+      ]
+    });
 
-      if (reporterEmployee) {
-        reporterInfo = {
-          ...reporterEmployee.toJSON(),
-          users: reporterEmployee.users ? {
-            ...(reporterEmployee.users as any).toJSON(),
-            roleData: (reporterEmployee.users as any).roleData || null
-          } : null
-        };
-      }
-    } else {
-      const reporterUser = await users.findOne({
-        where: { id: reportItem.userId, deletedAt: null },
-        include: [
-          {
-            model: roleData,
-            as: "roleData",
-            required: false
-          }
-        ]
-      });
-
-      if (reporterUser) {
-        reporterInfo = {
-          ...reporterUser.toJSON(),
-          roleData: reporterUser.roleData || null
-        };
-      }
+    if (reporterEmployee) {
+      reporterInfo = {
+        ...reporterEmployee.toJSON(),
+        users: reporterEmployee.users ? {
+          ...(reporterEmployee.users as any).toJSON(),
+          roleData: (reporterEmployee.users as any).roleData || null
+        } : null
+      };
     }
+  } else {
+    const reporterUser = await users.findOne({
+      where: { id: reportItem.userId, deletedAt: null },
+      include: [
+        {
+          model: roleData,
+          as: "roleData",
+          required: false
+        }
+      ]
+    });
 
-    const reportedUserToxicity = await this.toxicityService.getUserToxicityScore(reportItem.reportedUserId, reportItem.reportedRoleId);
-    const reporterToxicity = await this.toxicityService.getUserToxicityScore(reportItem.userId, reportItem.roleId);
+    if (reporterUser) {
+      reporterInfo = {
+        ...reporterUser.toJSON(),
+        roleData: reporterUser.roleData || null
+      };
+    }
+  }
 
-    return {
-      ...reportItem.toJSON(),
-      reportedUser: reportedUserInfo || null,
-      reporter: reporterInfo || null,
-      problem: reportItem.problem,
-      toxicityScores: {
-        reportedUser: reportedUserToxicity?.toxicityScore || 0,
-        reporter: reporterToxicity?.toxicityScore || 0
-      }
-    };
+  const reportedUserToxicity = await this.toxicityService.getUserToxicityScore(reportItem.reportedUserId, reportItem.reportedRoleId);
+  const reporterToxicity = await this.toxicityService.getUserToxicityScore(reportItem.userId, reportItem.roleId);
+
+  return {
+    ...reportItem.toJSON(),
+    reportedUser: reportedUserInfo || null,
+    reporter: reporterInfo || null,
+    problem: reportItem.problem,
+    toxicityScores: {
+      reportedUser: reportedUserToxicity?.toxicityScore || 0,
+      reporter: reporterToxicity?.toxicityScore || 0
+    }
   };
+};
+
 
   public getReportedEmployeeDetails = async (data: any): Promise<any> => {
     const { reportId } = data;
@@ -6853,33 +6757,91 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
   };
 
   public getReportedCompanyDetails = async (data: any): Promise<any> => {
-    const { reportId } = data;
+  const { reportId } = data;
 
-    const reportItem = await report.findOne({
-      where: { id: reportId, deletedAt: null },
+  const reportItem = await report.findOne({
+    where: { id: reportId, deletedAt: null },
+    attributes: [
+      "id",
+      "userId",
+      "roleId",
+      "reportedUserId",
+      "reportedRoleId",
+      "problem",
+      "createdAt"
+    ]
+  });
+
+  if (!reportItem) {
+    throw new Error("Report not found");
+  }
+
+  // Verify this is a company report
+  if (reportItem.reportedRoleId !== 2) {
+    throw new Error("This report is not for a company");
+  }
+
+  let reportedCompanyInfo = null;
+  const reportedCompany = await users.findOne({
+    where: { id: reportItem.reportedUserId, roleId: 2, deletedAt: null },
+    include: [
+      {
+        model: roleData,
+        as: "roleData",
+        required: false
+      }
+    ]
+  });
+
+  if (reportedCompany) {
+    reportedCompanyInfo = {
+      ...reportedCompany.toJSON(),
+      roleData: reportedCompany.roleData || null
+    };
+  }
+
+  let reporterInfo = null;
+  if (reportItem.roleId === 3) {
+    const reporterEmployee = await employee.findOne({
+      where: { id: reportItem.userId, deletedAt: null },
       attributes: [
         "id",
         "userId",
-        "roleId",
-        "reportedUserId",
-        "reportedRoleId",
-        "problem",
-        "createdAt"
+        "firstName",
+        "lastName",
+        "profile",
+        "email",
+        "phone",
+        "roleId"   // 👈 added
+      ],
+      include: [
+        {
+          model: users,
+          as: "users",
+          include: [
+            {
+              model: roleData,
+              as: "roleData",
+              required: false
+            }
+          ],
+          required: false
+        }
       ]
     });
 
-    if (!reportItem) {
-      throw new Error("Report not found");
+    if (reporterEmployee) {
+      reporterInfo = {
+        ...reporterEmployee.toJSON(),
+        users: reporterEmployee.users ? {
+          ...(reporterEmployee.users as any).toJSON(),
+          roleData: (reporterEmployee.users as any).roleData || null
+        } : null
+      };
     }
-
-    // Verify this is a company report
-    if (reportItem.reportedRoleId !== 2) {
-      throw new Error("This report is not for a company");
-    }
-
-    let reportedCompanyInfo = null;
-    const reportedCompany = await users.findOne({
-      where: { id: reportItem.reportedUserId, roleId: 2, deletedAt: null },
+  } else {
+    const reporterUser = await users.findOne({
+      where: { id: reportItem.userId, deletedAt: null },
       include: [
         {
           model: roleData,
@@ -6889,76 +6851,30 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
       ]
     });
 
-    if (reportedCompany) {
-      reportedCompanyInfo = {
-        ...reportedCompany.toJSON(),
-        roleData: reportedCompany.roleData || null
+    if (reporterUser) {
+      reporterInfo = {
+        ...reporterUser.toJSON(),
+        roleData: reporterUser.roleData || null
       };
     }
+  }
 
-    let reporterInfo = null;
-    if (reportItem.roleId === 3) {
-      const reporterEmployee = await employee.findOne({
-        where: { id: reportItem.userId, deletedAt: null },
-        include: [
-          {
-            model: users,
-            as: "users",
-            include: [
-              {
-                model: roleData,
-                as: "roleData",
-                required: false
-              }
-            ],
-            required: false
-          }
-        ]
-      });
+  const reportedCompanyToxicity = await this.toxicityService.getUserToxicityScore(reportItem.reportedUserId, reportItem.reportedRoleId);
+  const reporterToxicity = await this.toxicityService.getUserToxicityScore(reportItem.userId, reportItem.roleId);
 
-      if (reporterEmployee) {
-        reporterInfo = {
-          ...reporterEmployee.toJSON(),
-          users: reporterEmployee.users ? {
-            ...(reporterEmployee.users as any).toJSON(),
-            roleData: (reporterEmployee.users as any).roleData || null
-          } : null
-        };
-      }
-    } else {
-      const reporterUser = await users.findOne({
-        where: { id: reportItem.userId, deletedAt: null },
-        include: [
-          {
-            model: roleData,
-            as: "roleData",
-            required: false
-          }
-        ]
-      });
-
-      if (reporterUser) {
-        reporterInfo = {
-          ...reporterUser.toJSON(),
-          roleData: reporterUser.roleData || null
-        };
-      }
+  return {
+    ...reportItem.toJSON(),
+    reportedCompany: reportedCompanyInfo || null,
+    reporter: reporterInfo || null,
+    problem: reportItem.problem,
+    toxicityScores: {
+      reportedCompany: reportedCompanyToxicity?.toxicityScore || 0,
+      reporter: reporterToxicity?.toxicityScore || 0
     }
-
-    const reportedCompanyToxicity = await this.toxicityService.getUserToxicityScore(reportItem.reportedUserId, reportItem.reportedRoleId);
-    const reporterToxicity = await this.toxicityService.getUserToxicityScore(reportItem.userId, reportItem.roleId);
-
-    return {
-      ...reportItem.toJSON(),
-      reportedCompany: reportedCompanyInfo || null,
-      reporter: reporterInfo || null,
-      problem: reportItem.problem,
-      toxicityScores: {
-        reportedCompany: reportedCompanyToxicity?.toxicityScore || 0,
-        reporter: reporterToxicity?.toxicityScore || 0
-      }
-    };
   };
+};
+
+
 
   public getReportedUsers = async (data: any): Promise<any> => {
     const { limit, offset, search } = data;
@@ -7665,131 +7581,136 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
     };
   };
 
-  public approveRejectEmployee = async (data: any): Promise<any> => {
-    const { employeeId, status, adminId, rejectionReason, customLog } = data;
+public approveRejectEmployee = async (data: any): Promise<any> => {
+  const { employeeId, status, adminId, rejectionReason, customLog } = data;
 
-    const employeeExists = await employee.findOne({
-      where: { id: employeeId, deletedAt: null }
-    });
-    if (!employeeExists) {
-      throw new Error("Employee not found");
-    }
+  // 1️⃣ Validate employee
+  const employeeExists = await employee.findOne({
+    where: { id: employeeId, deletedAt: null }
+  });
+  if (!employeeExists) throw new Error("Employee not found");
 
-    const adminExists = await admin.findOne({
-      where: { id: adminId, deletedAt: null }
-    });
-    if (!adminExists) {
-      throw new Error("Admin not found");
-    }
+  // 2️⃣ Validate admin
+  const adminExists = await admin.findOne({
+    where: { id: adminId, deletedAt: null }
+  });
+  if (!adminExists) throw new Error("Admin not found");
 
-    if (![3, 4].includes(status)) {
-      throw new Error("Invalid status. Use 3 for approved or 4 for rejected");
-    }
+  // 3️⃣ Validate status
+  if (![3, 4].includes(status)) throw new Error("Invalid status. Use 3 for approved or 4 for rejected");
 
-    const isApproved = status === 3;
-    const isApprovedValue = isApproved ? true : false;
+  const isApproved = status === 3;
 
-    await employee.update(
-      {
-        profileStatus: status,
-        isApproved: isApprovedValue,
-        rejectionReason: isApproved ? null : (rejectionReason || "No reason provided")
-      },
-      { where: { id: employeeId } }
-    );
-
-    if (isApproved) {
-      await userLog.create({
-        userId: employeeExists.userId,
-        employeeId: employeeId,
-        isApproved: true,
-        approvedBy: adminId,
-        approvedOn: new Date()
-      });
-    } else {
-      if (customLog) {
-        // Create custom log only
-        await this.addCustomUserLog({
-          userId: employeeExists.userId,
-          roleId: 3, // Employee role
-          activity: customLog,
-          adminId: adminId
-        });
-      } else {
-        // Create standard rejection log only if no custom log provided
-        await userLog.create({
-          userId: employeeExists.userId,
-          employeeId: employeeId,
-          isApproved: false,
-          rejectedReason: rejectionReason || "No reason provided",
-          rejectedBy: adminId,
-          rejectedOn: new Date()
-        });
-      }
-    }
-
-    const employeeData = await employee.findOne({
-      where: { id: employeeId },
-      attributes: ['email', 'firstName', 'lastName'],
-      include: [{
-        as: "users",
-        model: users,
-        attributes: ['fcmToken'],
-        required: false,
-        include: [{
-          as: "roleData",
-          model: roleData,
-          attributes: ["companyName"],
-          required: false
-        }]
-      }]
-    });
-
-    let employeeName: string;
-    if (employeeData) {
-      employeeName = `${employeeData.firstName} ${employeeData.lastName}`.trim();
-    } else {
-      employeeName = "Unknown Employee";
-    }
-
-    const notificationStatus = isApproved ? "Goedgekeurd" : "Afgewezen";
-    const notificationBody = isApproved
-      ? "Uw account is succesvol goedgekeurd."
-      : `Uw account is afgewezen vanwege ${rejectionReason || "onbekende reden"}.`;
-
-    await userNotification.create({
-      userId: employeeExists.userId,
-      adminId: adminId,
-      content: notificationBody,
-      seen: false,
-      typeId: isApproved ? 1 : 2 // 1 = approved, 2 = rejected
-    });
-
-    const fcmToken = (employeeData?.users as any)?.fcmToken;
-    if (fcmToken) {
-      try {
-        await sendPushNotification(
-          fcmToken,
-          `Account ${notificationStatus}`,
-          notificationBody,
-          ""
-        );
-      } catch (error) {
-        console.log("Failed to send push notification:", error);
-      }
-    }
-
-    return {
-      employeeId: employeeId,
-      userId: employeeExists.userId,
-      status: status,
-      statusText: isApproved ? "Approved" : "Rejected",
-      adminId: adminId,
+  // 4️⃣ Update employee table
+  await employee.update(
+    {
+      profileStatus: status,
+      isApproved: isApproved,
       rejectionReason: isApproved ? null : (rejectionReason || "No reason provided"),
-      customLog: isApproved ? null : customLog,
-      processedAt: new Date()
-    };
+      rejectedBy: isApproved ? null : adminId
+    },
+    { where: { id: employeeId } }
+  );
+
+  // 5️⃣ Update users table rejectionReason if rejected
+  if (!isApproved) {
+    await users.update(
+      {
+        rejectionReason: rejectionReason || "No reason provided",
+        rejectedBy: adminId
+      },
+      { where: { id: employeeExists.userId } }
+    );
+  }
+
+  // 6️⃣ Create log in userLog table
+  const logData: any = {
+    userId: employeeExists.userId,
+    employeeId: employeeId,
+    isApproved: isApproved
   };
+
+  if (isApproved) {
+    logData.approvedBy = adminId;
+    logData.approvedOn = new Date();
+  } else {
+    logData.rejectedBy = adminId;
+    logData.rejectedReason = rejectionReason || "No reason provided";
+    logData.rejectedOn = new Date();
+  }
+
+  if (!isApproved && customLog && customLog.trim() !== "") {
+    await this.addCustomUserLog({
+      userId: employeeExists.userId,
+      employeeId: employeeId,
+      roleId: 3,
+      activity: customLog,
+      adminId: adminId
+    });
+  } else {
+    await userLog.create(logData);
+  }
+
+  // 7️⃣ Fetch employee + user for notification
+  const employeeData = await employee.findOne({
+    where: { id: employeeId },
+    attributes: ['firstName', 'lastName'],
+    include: [{
+      as: "users",
+      model: users,
+      attributes: ['fcmToken'],
+      required: false,
+      include: [{
+        as: "roleData",
+        model: roleData,
+        attributes: ["companyName"],
+        required: false
+      }]
+    }]
+  });
+
+  const notificationStatus = isApproved ? "Goedgekeurd" : "Afgewezen";
+  const notificationBody = isApproved
+    ? "Uw account is succesvol goedgekeurd."
+    : `Uw account is afgewezen vanwege ${rejectionReason || "onbekende reden"}.`;
+
+  await userNotification.create({
+    userId: employeeExists.userId,
+    adminId: adminId,
+    content: notificationBody,
+    seen: false,
+    typeId: isApproved ? 1 : 2
+  });
+
+  const fcmToken = (employeeData?.users as any)?.fcmToken;
+  if (fcmToken) {
+    try {
+      await sendPushNotification(
+        fcmToken,
+        `Account ${notificationStatus}`,
+        notificationBody,
+        ""
+      );
+    } catch (error) {
+      console.log("Failed to send push notification:", error);
+    }
+  }
+
+  return {
+    employeeId: employeeId,
+    userId: employeeExists.userId,
+    status: status,
+    statusText: isApproved ? "Approved" : "Rejected",
+    adminId: adminId,
+    rejectionReason: isApproved ? null : (rejectionReason || "No reason provided"),
+    customLog: isApproved ? null : customLog || null,
+    processedAt: new Date()
+  };
+};
+
+
+
+
 
   public approveRejectCompany = async (data: any): Promise<any> => {
     const { companyId, status, adminId, rejectionReason, customLog } = data;
@@ -7945,127 +7866,125 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
   };
 
   public reviewAppeal = async (data: any): Promise<any> => {
-    const { userId, roleId, status, adminId, rejectionReason } = data;
+  const { userId, roleId, status, adminId, rejectionReason } = data;
 
-    const whereClause: any = { id: userId, deletedAt: null };
-    if (roleId) {
-      whereClause.roleId = roleId;
-    }
+  // Determine which table to query based on role
+  let userExists: any;
+  if (roleId === 3) { // Employee
+    userExists = await employee.findOne({ where: { userId, deletedAt: null } });
+  } else if (roleId === 2) { // Company
+    userExists = await roleData.findOne({ where: { userId, deletedAt: null } });
+  } else { // Generic User
+    userExists = await users.findOne({ where: { id: userId, deletedAt: null } });
+  }
 
-    const userExists = await users.findOne({
-      where: whereClause
+  if (!userExists) {
+    const entityType = roleId === 2 ? "Company" : roleId === 3 ? "Employee" : "User";
+    throw new Error(`${entityType} not found`);
+  }
+
+  // Check admin
+  const adminExists = await admin.findOne({ where: { id: adminId, deletedAt: null } });
+  if (!adminExists) throw new Error("Admin not found");
+
+  // Check if appeal exists
+  if (!userExists.appealMessage || !userExists.hasAppeal) {
+    const entityType = roleId === 2 ? "company" : roleId === 3 ? "employee" : "user";
+    throw new Error(`No appeal found for this ${entityType}`);
+  }
+
+  // Validate status
+  if (!["approved", "rejected"].includes(status)) {
+    throw new Error("Invalid status. Use 'approved' or 'rejected'");
+  }
+
+  // Handle approval: reset suspension/mute if applicable
+  if (status === "approved" && roleId === 3) { // Only employees have logs
+    const latestSuspension = await userLog.findOne({
+      where: { userId, isSuspend: true, deletedAt: null },
+      order: [["createdAt", "DESC"]],
     });
-    if (!userExists) {
-      const entityType = roleId === 2 ? "Company" : roleId === 3 ? "Employee" : "User";
-      throw new Error(`${entityType} not found`);
-    }
 
-    const adminExists = await admin.findOne({
-      where: { id: adminId, deletedAt: null }
+    const latestMute = await userLog.findOne({
+      where: { userId, isMuted: true, deletedAt: null },
+      order: [["createdAt", "DESC"]],
     });
-    if (!adminExists) {
-      throw new Error("Admin not found");
-    }
 
-    if (!userExists.appealMessage) {
-      const entityType = roleId === 2 ? "company" : roleId === 3 ? "employee" : "user";
-      throw new Error(`No appeal found for this ${entityType}`);
-    }
-
-    if (!["approved", "rejected"].includes(status)) {
-      throw new Error("Invalid status. Use 'approved' or 'rejected'");
-    }
-
-    if (status === "approved") {
-      const latestSuspension = await userLog.findOne({
-        where: {
-          userId: userId,
-          isSuspend: true,
-          deletedAt: null
-        },
-        order: [["createdAt", "DESC"]]
+    if (latestSuspension) {
+      await userLog.create({
+        userId,
+        isSuspend: false,
+        unSuspendedBy: adminId,
+        unSuspendedOn: new Date(),
       });
+    }
 
-      const latestMute = await userLog.findOne({
-        where: {
-          userId: userId,
-          isMuted: true,
-          deletedAt: null
-        },
-        order: [["createdAt", "DESC"]]
+    if (latestMute) {
+      await userLog.create({
+        userId,
+        isMuted: false,
+        unMutedBy: adminId,
+        unMutedOn: new Date(),
       });
-      if (latestSuspension) {
-        await userLog.create({
-          userId: userId,
-          isSuspend: false,
-          unSuspendedBy: adminId,
-          unSuspendedOn: new Date(),
-        });
-      }
-      if (latestMute) {
-        await userLog.create({
-          userId: userId,
-          isMuted: false,
-          unMutedBy: adminId,
-          unMutedOn: new Date(),
-        });
-      }
     }
-    const updateData: any = {
-      appealMessage: null,
-      hasAppeal: false
-    };
+  }
 
-    if (status === "rejected" && rejectionReason) {
-      updateData.rejectionReason = rejectionReason;
-    }
+  // Update appeal status
+  const updateData: any = { appealMessage: null, hasAppeal: false };
+  if (status === "rejected" && rejectionReason) updateData.rejectionReason = rejectionReason;
 
-    await users.update(updateData, { where: { id: userId } });
+  // Update in correct table
+  if (roleId === 3) await employee.update(updateData, { where: { userId } });
+  else if (roleId === 2) await roleData.update(updateData, { where: { userId } });
+  else await users.update(updateData, { where: { id: userId } });
 
-    const notificationStatus = status === "approved" ? "Goedgekeurd" : "Afgewezen";
-    const notificationBody = status === "approved"
+  // Notification message
+  const notificationStatus = status === "approved" ? "Goedgekeurd" : "Afgewezen";
+  const notificationBody =
+    status === "approved"
       ? "Uw beroep is goedgekeurd. Uw account is hersteld."
       : `Uw beroep is afgewezen. ${rejectionReason || "Geen verdere uitleg beschikbaar."}`;
 
+  // Create notification (fail gracefully)
+  try {
+    await userNotification.create({
+      userId,
+      adminId,
+      content: notificationBody,
+      seen: false,
+      typeId: status === "approved" ? 1 : 2,
+    });
+  } catch (error: unknown) {
+    console.warn("Failed to create notification in DB:", (error as Error).message);
+  }
+
+  // Push notification (fail gracefully)
+  const fcmToken = (userExists as any).fcmToken;
+  if (fcmToken) {
     try {
-      await userNotification.create({
-        userId: userId,
-        adminId: adminId,
-        content: notificationBody,
-        seen: false,
-        typeId: status === "approved" ? 1 : 2
-      });
-    } catch (error) {
-      console.log("Failed to create notification:", error);
+      await sendPushNotification(fcmToken, `Appeal ${notificationStatus}`, notificationBody, "");
+    } catch (error: unknown) {
+      console.warn(`Failed to send push notification to userId=${userId}:`, (error as Error).message);
     }
+  }
 
-    if (userExists.fcmToken) {
-      try {
-        await sendPushNotification(
-          userExists.fcmToken,
-          `Appeal ${notificationStatus}`,
-          notificationBody,
-          ""
-        );
-      } catch (error) {
-        console.log("Failed to send push notification:", error);
-      }
-    }
+  const entityType = roleId === 2 ? "Company" : roleId === 3 ? "Employee" : "User";
+  const entityId = roleId === 2 ? "companyId" : roleId === 3 ? "employeeId" : "userId";
 
-    const entityType = roleId === 2 ? "Company" : roleId === 3 ? "Employee" : "User";
-    const entityId = roleId === 2 ? "companyId" : roleId === 3 ? "employeeId" : "userId";
-    
-    return {
-      [entityId]: userId,
-      roleId: roleId || userExists.roleId,
-      entityType: entityType,
-      status: status,
-      statusText: status === "approved" ? "Approved" : "Rejected",
-      adminId: adminId,
-      rejectionReason: status === "rejected" ? rejectionReason : null,
-      processedAt: new Date()
-    };
+  return {
+    [entityId]: userId,
+    roleId: roleId || (userExists as any).roleId,
+    entityType,
+    status,
+    statusText: status === "approved" ? "Approved" : "Rejected",
+    adminId,
+    rejectionReason: status === "rejected" ? rejectionReason : null,
+    processedAt: new Date(),
   };
+};
+
+
+
 
 }
 
