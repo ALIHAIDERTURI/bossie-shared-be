@@ -7874,127 +7874,125 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
   };
 
   public reviewAppeal = async (data: any): Promise<any> => {
-    const { userId, roleId, status, adminId, rejectionReason } = data;
+  const { userId, roleId, status, adminId, rejectionReason } = data;
 
-    const whereClause: any = { id: userId, deletedAt: null };
-    if (roleId) {
-      whereClause.roleId = roleId;
-    }
+  // Determine which table to query based on role
+  let userExists: any;
+  if (roleId === 3) { // Employee
+    userExists = await employee.findOne({ where: { userId, deletedAt: null } });
+  } else if (roleId === 2) { // Company
+    userExists = await roleData.findOne({ where: { userId, deletedAt: null } });
+  } else { // Generic User
+    userExists = await users.findOne({ where: { id: userId, deletedAt: null } });
+  }
 
-    const userExists = await users.findOne({
-      where: whereClause
+  if (!userExists) {
+    const entityType = roleId === 2 ? "Company" : roleId === 3 ? "Employee" : "User";
+    throw new Error(`${entityType} not found`);
+  }
+
+  // Check admin
+  const adminExists = await admin.findOne({ where: { id: adminId, deletedAt: null } });
+  if (!adminExists) throw new Error("Admin not found");
+
+  // Check if appeal exists
+  if (!userExists.appealMessage || !userExists.hasAppeal) {
+    const entityType = roleId === 2 ? "company" : roleId === 3 ? "employee" : "user";
+    throw new Error(`No appeal found for this ${entityType}`);
+  }
+
+  // Validate status
+  if (!["approved", "rejected"].includes(status)) {
+    throw new Error("Invalid status. Use 'approved' or 'rejected'");
+  }
+
+  // Handle approval: reset suspension/mute if applicable
+  if (status === "approved" && roleId === 3) { // Only employees have logs
+    const latestSuspension = await userLog.findOne({
+      where: { userId, isSuspend: true, deletedAt: null },
+      order: [["createdAt", "DESC"]],
     });
-    if (!userExists) {
-      const entityType = roleId === 2 ? "Company" : roleId === 3 ? "Employee" : "User";
-      throw new Error(`${entityType} not found`);
-    }
 
-    const adminExists = await admin.findOne({
-      where: { id: adminId, deletedAt: null }
+    const latestMute = await userLog.findOne({
+      where: { userId, isMuted: true, deletedAt: null },
+      order: [["createdAt", "DESC"]],
     });
-    if (!adminExists) {
-      throw new Error("Admin not found");
-    }
 
-    if (!userExists.appealMessage) {
-      const entityType = roleId === 2 ? "company" : roleId === 3 ? "employee" : "user";
-      throw new Error(`No appeal found for this ${entityType}`);
-    }
-
-    if (!["approved", "rejected"].includes(status)) {
-      throw new Error("Invalid status. Use 'approved' or 'rejected'");
-    }
-
-    if (status === "approved") {
-      const latestSuspension = await userLog.findOne({
-        where: {
-          userId: userId,
-          isSuspend: true,
-          deletedAt: null
-        },
-        order: [["createdAt", "DESC"]]
+    if (latestSuspension) {
+      await userLog.create({
+        userId,
+        isSuspend: false,
+        unSuspendedBy: adminId,
+        unSuspendedOn: new Date(),
       });
+    }
 
-      const latestMute = await userLog.findOne({
-        where: {
-          userId: userId,
-          isMuted: true,
-          deletedAt: null
-        },
-        order: [["createdAt", "DESC"]]
+    if (latestMute) {
+      await userLog.create({
+        userId,
+        isMuted: false,
+        unMutedBy: adminId,
+        unMutedOn: new Date(),
       });
-      if (latestSuspension) {
-        await userLog.create({
-          userId: userId,
-          isSuspend: false,
-          unSuspendedBy: adminId,
-          unSuspendedOn: new Date(),
-        });
-      }
-      if (latestMute) {
-        await userLog.create({
-          userId: userId,
-          isMuted: false,
-          unMutedBy: adminId,
-          unMutedOn: new Date(),
-        });
-      }
     }
-    const updateData: any = {
-      appealMessage: null,
-      hasAppeal: false
-    };
+  }
 
-    if (status === "rejected" && rejectionReason) {
-      updateData.rejectionReason = rejectionReason;
-    }
+  // Update appeal status
+  const updateData: any = { appealMessage: null, hasAppeal: false };
+  if (status === "rejected" && rejectionReason) updateData.rejectionReason = rejectionReason;
 
-    await users.update(updateData, { where: { id: userId } });
+  // Update in correct table
+  if (roleId === 3) await employee.update(updateData, { where: { userId } });
+  else if (roleId === 2) await roleData.update(updateData, { where: { userId } });
+  else await users.update(updateData, { where: { id: userId } });
 
-    const notificationStatus = status === "approved" ? "Goedgekeurd" : "Afgewezen";
-    const notificationBody = status === "approved"
+  // Notification message
+  const notificationStatus = status === "approved" ? "Goedgekeurd" : "Afgewezen";
+  const notificationBody =
+    status === "approved"
       ? "Uw beroep is goedgekeurd. Uw account is hersteld."
       : `Uw beroep is afgewezen. ${rejectionReason || "Geen verdere uitleg beschikbaar."}`;
 
+  // Create notification (fail gracefully)
+  try {
+    await userNotification.create({
+      userId,
+      adminId,
+      content: notificationBody,
+      seen: false,
+      typeId: status === "approved" ? 1 : 2,
+    });
+  } catch (error: unknown) {
+    console.warn("Failed to create notification in DB:", (error as Error).message);
+  }
+
+  // Push notification (fail gracefully)
+  const fcmToken = (userExists as any).fcmToken;
+  if (fcmToken) {
     try {
-      await userNotification.create({
-        userId: userId,
-        adminId: adminId,
-        content: notificationBody,
-        seen: false,
-        typeId: status === "approved" ? 1 : 2
-      });
-    } catch (error) {
-      console.log("Failed to create notification:", error);
+      await sendPushNotification(fcmToken, `Appeal ${notificationStatus}`, notificationBody, "");
+    } catch (error: unknown) {
+      console.warn(`Failed to send push notification to userId=${userId}:`, (error as Error).message);
     }
+  }
 
-    if (userExists.fcmToken) {
-      try {
-        await sendPushNotification(
-          userExists.fcmToken,
-          `Appeal ${notificationStatus}`,
-          notificationBody,
-          ""
-        );
-      } catch (error) {
-        console.log("Failed to send push notification:", error);
-      }
-    }
+  const entityType = roleId === 2 ? "Company" : roleId === 3 ? "Employee" : "User";
+  const entityId = roleId === 2 ? "companyId" : roleId === 3 ? "employeeId" : "userId";
 
-    const entityType = roleId === 2 ? "Company" : roleId === 3 ? "Employee" : "User";
-    const entityId = roleId === 2 ? "companyId" : roleId === 3 ? "employeeId" : "userId";
-    
-    return {
-      [entityId]: userId,
-      roleId: roleId || userExists.roleId,
-      entityType: entityType,
-      status: status,
-      statusText: status === "approved" ? "Approved" : "Rejected",
-      adminId: adminId,
-      rejectionReason: status === "rejected" ? rejectionReason : null,
-      processedAt: new Date()
-    };
+  return {
+    [entityId]: userId,
+    roleId: roleId || (userExists as any).roleId,
+    entityType,
+    status,
+    statusText: status === "approved" ? "Approved" : "Rejected",
+    adminId,
+    rejectionReason: status === "rejected" ? rejectionReason : null,
+    processedAt: new Date(),
   };
+};
+
+
+
 
 }
 
