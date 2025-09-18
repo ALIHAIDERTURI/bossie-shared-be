@@ -7594,131 +7594,136 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
     };
   };
 
-  public approveRejectEmployee = async (data: any): Promise<any> => {
-    const { employeeId, status, adminId, rejectionReason, customLog } = data;
+public approveRejectEmployee = async (data: any): Promise<any> => {
+  const { employeeId, status, adminId, rejectionReason, customLog } = data;
 
-    const employeeExists = await employee.findOne({
-      where: { id: employeeId, deletedAt: null }
-    });
-    if (!employeeExists) {
-      throw new Error("Employee not found");
-    }
+  // 1️⃣ Validate employee
+  const employeeExists = await employee.findOne({
+    where: { id: employeeId, deletedAt: null }
+  });
+  if (!employeeExists) throw new Error("Employee not found");
 
-    const adminExists = await admin.findOne({
-      where: { id: adminId, deletedAt: null }
-    });
-    if (!adminExists) {
-      throw new Error("Admin not found");
-    }
+  // 2️⃣ Validate admin
+  const adminExists = await admin.findOne({
+    where: { id: adminId, deletedAt: null }
+  });
+  if (!adminExists) throw new Error("Admin not found");
 
-    if (![3, 4].includes(status)) {
-      throw new Error("Invalid status. Use 3 for approved or 4 for rejected");
-    }
+  // 3️⃣ Validate status
+  if (![3, 4].includes(status)) throw new Error("Invalid status. Use 3 for approved or 4 for rejected");
 
-    const isApproved = status === 3;
-    const isApprovedValue = isApproved ? true : false;
+  const isApproved = status === 3;
 
-    await employee.update(
-      {
-        profileStatus: status,
-        isApproved: isApprovedValue,
-        rejectionReason: isApproved ? null : (rejectionReason || "No reason provided")
-      },
-      { where: { id: employeeId } }
-    );
-
-    if (isApproved) {
-      await userLog.create({
-        userId: employeeExists.userId,
-        employeeId: employeeId,
-        isApproved: true,
-        approvedBy: adminId,
-        approvedOn: new Date()
-      });
-    } else {
-      if (customLog) {
-        // Create custom log only
-        await this.addCustomUserLog({
-          userId: employeeExists.userId,
-          roleId: 3, // Employee role
-          activity: customLog,
-          adminId: adminId
-        });
-      } else {
-        // Create standard rejection log only if no custom log provided
-        await userLog.create({
-          userId: employeeExists.userId,
-          employeeId: employeeId,
-          isApproved: false,
-          rejectedReason: rejectionReason || "No reason provided",
-          rejectedBy: adminId,
-          rejectedOn: new Date()
-        });
-      }
-    }
-
-    const employeeData = await employee.findOne({
-      where: { id: employeeId },
-      attributes: ['email', 'firstName', 'lastName'],
-      include: [{
-        as: "users",
-        model: users,
-        attributes: ['fcmToken'],
-        required: false,
-        include: [{
-          as: "roleData",
-          model: roleData,
-          attributes: ["companyName"],
-          required: false
-        }]
-      }]
-    });
-
-    let employeeName: string;
-    if (employeeData) {
-      employeeName = `${employeeData.firstName} ${employeeData.lastName}`.trim();
-    } else {
-      employeeName = "Unknown Employee";
-    }
-
-    const notificationStatus = isApproved ? "Goedgekeurd" : "Afgewezen";
-    const notificationBody = isApproved
-      ? "Uw account is succesvol goedgekeurd."
-      : `Uw account is afgewezen vanwege ${rejectionReason || "onbekende reden"}.`;
-
-    await userNotification.create({
-      userId: employeeExists.userId,
-      adminId: adminId,
-      content: notificationBody,
-      seen: false,
-      typeId: isApproved ? 1 : 2 // 1 = approved, 2 = rejected
-    });
-
-    const fcmToken = (employeeData?.users as any)?.fcmToken;
-    if (fcmToken) {
-      try {
-        await sendPushNotification(
-          fcmToken,
-          `Account ${notificationStatus}`,
-          notificationBody,
-          ""
-        );
-      } catch (error) {
-        console.log("Failed to send push notification:", error);
-      }
-    }
-
-    return {
-      employeeId: employeeId,
-      userId: employeeExists.userId,
-      status: status,
-      statusText: isApproved ? "Approved" : "Rejected",
-      adminId: adminId,
+  // 4️⃣ Update employee table
+  await employee.update(
+    {
+      profileStatus: status,
+      isApproved: isApproved,
       rejectionReason: isApproved ? null : (rejectionReason || "No reason provided"),
-      customLog: isApproved ? null : customLog,
-      processedAt: new Date()
-    };
+      rejectedBy: isApproved ? null : adminId
+    },
+    { where: { id: employeeId } }
+  );
+
+  // 5️⃣ Update users table rejectionReason if rejected
+  if (!isApproved) {
+    await users.update(
+      {
+        rejectionReason: rejectionReason || "No reason provided",
+        rejectedBy: adminId
+      },
+      { where: { id: employeeExists.userId } }
+    );
+  }
+
+  // 6️⃣ Create log in userLog table
+  const logData: any = {
+    userId: employeeExists.userId,
+    employeeId: employeeId,
+    isApproved: isApproved
   };
+
+  if (isApproved) {
+    logData.approvedBy = adminId;
+    logData.approvedOn = new Date();
+  } else {
+    logData.rejectedBy = adminId;
+    logData.rejectedReason = rejectionReason || "No reason provided";
+    logData.rejectedOn = new Date();
+  }
+
+  if (!isApproved && customLog && customLog.trim() !== "") {
+    await this.addCustomUserLog({
+      userId: employeeExists.userId,
+      employeeId: employeeId,
+      roleId: 3,
+      activity: customLog,
+      adminId: adminId
+    });
+  } else {
+    await userLog.create(logData);
+  }
+
+  // 7️⃣ Fetch employee + user for notification
+  const employeeData = await employee.findOne({
+    where: { id: employeeId },
+    attributes: ['firstName', 'lastName'],
+    include: [{
+      as: "users",
+      model: users,
+      attributes: ['fcmToken'],
+      required: false,
+      include: [{
+        as: "roleData",
+        model: roleData,
+        attributes: ["companyName"],
+        required: false
+      }]
+    }]
+  });
+
+  const notificationStatus = isApproved ? "Goedgekeurd" : "Afgewezen";
+  const notificationBody = isApproved
+    ? "Uw account is succesvol goedgekeurd."
+    : `Uw account is afgewezen vanwege ${rejectionReason || "onbekende reden"}.`;
+
+  await userNotification.create({
+    userId: employeeExists.userId,
+    adminId: adminId,
+    content: notificationBody,
+    seen: false,
+    typeId: isApproved ? 1 : 2
+  });
+
+  const fcmToken = (employeeData?.users as any)?.fcmToken;
+  if (fcmToken) {
+    try {
+      await sendPushNotification(
+        fcmToken,
+        `Account ${notificationStatus}`,
+        notificationBody,
+        ""
+      );
+    } catch (error) {
+      console.log("Failed to send push notification:", error);
+    }
+  }
+
+  return {
+    employeeId: employeeId,
+    userId: employeeExists.userId,
+    status: status,
+    statusText: isApproved ? "Approved" : "Rejected",
+    adminId: adminId,
+    rejectionReason: isApproved ? null : (rejectionReason || "No reason provided"),
+    customLog: isApproved ? null : customLog || null,
+    processedAt: new Date()
+  };
+};
+
+
+
+
 
   public approveRejectCompany = async (data: any): Promise<any> => {
     const { companyId, status, adminId, rejectionReason, customLog } = data;
