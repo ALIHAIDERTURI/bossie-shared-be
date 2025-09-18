@@ -5763,181 +5763,168 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
   };
 
   public getEmployeesAppeals = async (data: any) => {
-    try {
-      const {
-        limit = 10,
-        offset = 0,
-        search = "",
-        status = [],
-        hasAppeal = null,
-      } = data;
+  try {
+    const {
+      limit = 10,
+      offset = 0,
+      search = "",
+      status = [],
+      hasAppeal = null,
+    } = data;
 
-      const whereClause: any = {
-        deletedAt: null,
-        hasAppeal: true, // Only employees with appeals
-      };
+    const whereClause: any = {
+      deletedAt: null,
+      hasAppeal: true, // Only employees with appeals
+    };
 
-      const statusArray = Array.isArray(status) ? status : (status ? [status] : []);
-      
-      // Build search conditions
-      const searchConditions: any[] = [];
-      if (search && search.trim()) {
-        searchConditions.push(
-          { firstName: { [Op.like]: `%${search.trim()}%` } },
-          { lastName: { [Op.like]: `%${search.trim()}%` } },
-          { email: { [Op.like]: `%${search.trim()}%` } },
-          { phone: { [Op.like]: `%${search.trim()}%` } }
-        );
-      }
-      
-      // Build status conditions
-      const statusConditions: any[] = [];
-      if (statusArray.length > 0) {
-        statusArray.forEach((statusType: string) => {
-          switch (statusType.toLowerCase()) {
-            case "active":
-              statusConditions.push({ accountStatus: 1 });
-              break;
-            case "suspended":
-              statusConditions.push({ accountStatus: 3 });
-              break;
-            case "muted":
-              statusConditions.push({ accountStatus: 4 });
-              break;
-            case "unavailable":
-              statusConditions.push({ accountStatus: 2 });
-              break;
+    const statusArray = Array.isArray(status) ? status : (status ? [status] : []);
+
+    // Build search conditions
+    const searchConditions: any[] = [];
+    if (search && search.trim()) {
+      searchConditions.push(
+        { firstName: { [Op.like]: `%${search.trim()}%` } },
+        { lastName: { [Op.like]: `%${search.trim()}%` } },
+        { email: { [Op.like]: `%${search.trim()}%` } },
+        { phone: { [Op.like]: `%${search.trim()}%` } }
+      );
+    }
+
+    // Build status conditions
+    const statusConditions: any[] = [];
+    if (statusArray.length > 0) {
+      statusArray.forEach((statusType: string) => {
+        switch (statusType.toLowerCase()) {
+          case "active":
+            statusConditions.push({ accountStatus: 1 });
+            break;
+          case "suspended":
+            statusConditions.push({ accountStatus: 3 });
+            break;
+          case "muted":
+            statusConditions.push({ accountStatus: 4 });
+            break;
+          case "unavailable":
+            statusConditions.push({ accountStatus: 2 });
+            break;
+        }
+      });
+    }
+
+    if (searchConditions.length > 0 || statusConditions.length > 0) {
+      whereClause[Op.and] = [];
+      if (searchConditions.length > 0) whereClause[Op.and].push({ [Op.or]: searchConditions });
+      if (statusConditions.length > 0) whereClause[Op.and].push({ [Op.or]: statusConditions });
+    }
+
+    if (hasAppeal !== null) {
+      whereClause.hasAppeal = !!hasAppeal;
+    }
+
+    const includeArray: any[] = [
+      {
+        model: users,
+        as: "users",
+        required: false,
+        attributes: ["id", "name", "roleId"],
+        include: [
+          {
+            model: roleData,
+            as: "roleData",
+            required: false,
+            attributes: ["companyName", "profile"]
           }
+        ]
+      }
+    ];
+
+    const { count: totalCount, rows: employeesList } = await employee.findAndCountAll({
+      where: whereClause,
+      include: includeArray,
+      limit: parseInt(limit),
+      offset: parseInt(offset),
+      order: [["createdAt", "DESC"]],
+      attributes: [
+        "id",
+        "userId",
+        "firstName",
+        "lastName",
+        "email",
+        "phone",
+        "profile",
+        "accountStatus",
+        "hasAppeal",
+        "createdAt"
+      ],
+    });
+
+    const employeesWithWarnings = await Promise.all(
+      employeesList.map(async (emp: any) => {
+        const muteCount = await userLog.count({
+          where: {
+            employeeId: emp.id,
+            isMuted: true,
+            deletedAt: null,
+          },
         });
-      }
 
-      // Combine search and status conditions
-      const combinedConditions: any[] = [];
-      if (searchConditions.length > 0) {
-        combinedConditions.push({ [Op.or]: searchConditions });
-      }
-      if (statusConditions.length > 0) {
-        combinedConditions.push({ [Op.or]: statusConditions });
-      }
+        const suspendCount = await userLog.count({
+          where: {
+            employeeId: emp.id,
+            isSuspend: true,
+            deletedAt: null,
+          },
+        });
 
-      if (combinedConditions.length > 0) {
-        whereClause[Op.and] = combinedConditions;
-      }
+        let currentStatus = "active";
+        if (emp.accountStatus === 3) currentStatus = "suspended";
+        else if (emp.accountStatus === 4) currentStatus = "muted";
 
-      if (hasAppeal !== null) {
-        if (hasAppeal === true) {
-          whereClause.hasAppeal = true;
-        } else if (hasAppeal === false) {
-          whereClause.hasAppeal = false;
-        }
-      }
+        return {
+          id: emp.id,
+          userId: emp.userId,
+          firstName: emp.firstName,
+          lastName: emp.lastName,
+          name: `${emp.firstName} ${emp.lastName}`,
+          profile: emp.profile || null, // ✅ fixed here
+          phone: emp.phone,
+          email: emp.email,
+          status: currentStatus,
+          accountStatus: emp.accountStatus, // ✅ added
+          warnings: {
+            total: muteCount + suspendCount,
+            mute: muteCount,
+            suspend: suspendCount,
+          },
+          hasAppeal: emp.hasAppeal || false,
+          appeal: {
+            message: null,
+            originalReason: null
+          },
+          createdAt: emp.createdAt,
+          companyName: emp.users?.roleData?.companyName || "Unknown Company",
+          userInfo: emp.users || null,
+        };
+      })
+    );
 
-      const includeArray: any[] = [
-        {
-          model: users,
-          as: "users",
-          required: false,
-          attributes: ["id", "name", "roleId"],
-          include: [
-            {
-              model: roleData,
-              as: "roleData",
-              required: false,
-              attributes: ["companyName", "profile"]
-            }
-          ]
-        }
-      ];
+    const totalPages = Math.ceil(totalCount / limit);
 
-      const { count: totalCount, rows: employeesList } = await employee.findAndCountAll({
-        where: whereClause,
-        include: includeArray,
+    return {
+      employees: employeesWithWarnings,
+      pagination: {
         limit: parseInt(limit),
         offset: parseInt(offset),
-        order: [["createdAt", "DESC"]],
-        attributes: [
-          "id",
-          "userId",
-          "firstName",
-          "lastName",
-          "email",
-          "phone",
-          "profile",
-          "accountStatus",
-          "hasAppeal",
-          "createdAt"
-        ],
-      });
+        totalCount,
+        totalPages,
+        currentPage: Math.floor(offset / limit) + 1,
+      },
+    };
+  } catch (error) {
+    throw error;
+  }
+};
 
-      const employeesWithWarnings = await Promise.all(
-        employeesList.map(async (emp: any) => {
-          const muteCount = await userLog.count({
-            where: {
-              employeeId: emp.id,
-              isMuted: true,
-              deletedAt: null,
-            },
-          });
-
-          const suspendCount = await userLog.count({
-            where: {
-              employeeId: emp.id,
-              isSuspend: true,
-              deletedAt: null,
-            },
-          });
-        
-          let currentStatus = "active";
-          // Use accountStatus to determine current status
-          if (emp.accountStatus === 3) {
-            currentStatus = "suspended";
-          } else if (emp.accountStatus === 4) {
-            currentStatus = "muted";
-          }
-
-          return {
-            id: emp.id,
-            userId: emp.userId,
-            firstName: emp.firstName,
-            lastName: emp.lastName,
-            name: `${emp.firstName} ${emp.lastName}`,
-            profilePicture: emp.profile || null,
-            phone: emp.phone,
-            email: emp.email,
-            status: currentStatus,
-            warnings: {
-              total: muteCount + suspendCount,
-              mute: muteCount,
-              suspend: suspendCount,
-            },
-            hasAppeal: emp.hasAppeal || false,
-            appeal: {
-              message: null, // Will be null until appealMessage column is added to database
-              originalReason: null // We'll need to determine this based on suspension/mute status
-            },
-            createdAt: emp.createdAt,
-            companyName: emp.users?.roleData?.companyName || "Unknown Company",
-            userInfo: emp.users || null,
-          };
-        })
-      );
-
-      const totalPages = Math.ceil(totalCount / limit);
-
-      return {
-        employees: employeesWithWarnings,
-        pagination: {
-          limit: parseInt(limit),
-          offset: parseInt(offset),
-          totalCount,
-          totalPages,
-          currentPage: Math.floor(offset / limit) + 1,
-        },
-      };
-    } catch (error) {
-      throw error;
-    }
-  };
 
   public getCompaniesAppeals = async (data: any) => {
     try {
