@@ -657,147 +657,151 @@ export class RequestService {
   };
 
   public getUpdateReqInfo = async (data: any): Promise<any> => {
-    const { id, roleId, userId } = data;
+  const { id, roleId, userId } = data;
 
-    // Define attributes based on roleId
-    let attributeData: any;
-    const includeCondition: any = [];
+  // Define attributes based on roleId
+  let attributeData: any;
+  const includeCondition: any = [];
 
-    switch (roleId) {
-      case 1:
-        attributeData = [
-          "id",
-          "profile",
-          "industryId",
-          "about",
-          "firstName",
-          "lastName",
-          "title",
-          "genderId",
-          "dob",
-          "age",
-          "address",
-          "educationalAttainmentId",
-          "currentSituationId",
+  switch (roleId) {
+    case 1:
+      attributeData = [
+        "id",
+        "profile",
+        "industryId",
+        "about",
+        "firstName",
+        "lastName",
+        "title",
+        "genderId",
+        "dob",
+        "age",
+        "address",
+        "educationalAttainmentId",
+        "currentSituationId",
+        "languageId",
+        "hourlyRate",
+        "chamberCommerceNumber",
+      ];
 
-          "languageId",
-          "hourlyRate",
-          "chamberCommerceNumber"
-        ];
+      includeCondition.push({
+        as: "users",
+        model: users,
+        attributes: ["id", "name", "email"],
+        include: [
+          {
+            as: "roleData",
+            model: roleData,
+            attributes: attributeData,
+          },
+        ],
+      });
+      break;
 
-        includeCondition.push({
-          as: "users",
-          model: users,
-          attributes: ["id", "name", "email"],
-          include: [
-            {
-              as: "roleData",
-              model: roleData,
-              attributes: attributeData,
-            },
-          ],
-        });
-        break;
-      case 2:
-        attributeData = [
-          "id",
-          "profile",
-          "companyName",
-          "streetName",
-          "houseName",
-          "city",
-          "province",
-          "postalCode",
-          "chamberCommerceNumber",
-          "website",
-          "industryId",
-          "about", "hourlyRate", "currentSituationId", "firstName", "lastName", "dob"
-        ];
+    case 2:
+      attributeData = [
+        "id",
+        "profile",
+        "companyName",
+        "streetName",
+        "houseName",
+        "city",
+        "province",
+        "postalCode",
+        "chamberCommerceNumber",
+        "website",
+        "industryId",
+        "about",
+        "hourlyRate",
+        "currentSituationId",
+        "firstName",
+        "lastName",
+        "dob",
+      ];
 
-        includeCondition.push({
-          as: "users",
-          model: users,
-          attributes: ["id", "name", "email"],
-          include: [
-            {
-              as: "roleData",
-              model: roleData,
-              attributes: attributeData,
-            },
-          ],
-        });
-        break;
+      includeCondition.push({
+        as: "users",
+        model: users,
+        attributes: ["id", "name", "email"],
+        include: [
+          {
+            as: "roleData",
+            model: roleData,
+            attributes: attributeData,
+          },
+        ],
+      });
+      break;
 
-      case 3:
-        attributeData = [
-          "id",
-          "profile",
-          "firstName",
-          "lastName",
-          "currentSituationId",
-          "currentSituationName",
-          "phone"
-        ];
+    case 3:
+      attributeData = [
+        "id",
+        "profile",
+        "firstName",
+        "lastName",
+        "currentSituationId",
+        "currentSituationName",
+        "phone",
+      ];
 
-        includeCondition.push({
-          as: "employee",
-          model: employee,
-          attributes: attributeData,
-        });
-        break;
+      includeCondition.push({
+        as: "employee",
+        model: employee,
+        attributes: attributeData,
+      });
+      break;
 
-      default:
-        throw new Error("Ongeldige rol-ID");
-    }
+    default:
+      throw new Error("Ongeldige rol-ID");
+  }
 
-    // Build where clause based on whether id and userId are provided
-    const whereClause: any = {};
-    if (id) {
-      whereClause.id = id;
-    }
-    if (userId) {
-      if (roleId === 3) {
-        whereClause.employeeId = userId;
-      } else {
-        whereClause.userId = userId;
-      }
-    }
-
-    const res: any = await duplicateData.findOne({
-      where: whereClause,
-      attributes: attributeData, // Only necessary attributes from duplicateData
-      include: includeCondition, // Include based on roleId
-    });
-
-    if (!res) {
-      throw new Error("Opname niet gevonden"); // Handle case when res is null
-    }
-    // Use .get() to convert Sequelize instances to plain objects
-    const previousData =
-      roleId !== 3 ? res?.users?.get() || null : res.employee;
-    
-    // Format updatedData to match previousData structure
-    let updatedData: any;
-    if (roleId !== 3) {
-      // For freelancers and companies, format like previousData with nested roleData
-      updatedData = {
-        id: res.id,
-        name: res?.users?.name || null,
-        email: res?.users?.email || null,
-        roleData: res.get()
-      };
+  // Build where clause based on whether id and userId are provided
+  const whereClause: any = {};
+  if (id) {
+    whereClause.id = id;
+  }
+  if (userId) {
+    if (roleId === 3) {
+      whereClause.employeeId = userId; // fix applied for roleId 3
     } else {
-      // For employees, use the employee data directly
-      updatedData = res.employee;
+      whereClause.userId = userId;
     }
+  }
 
-    const resp: any = {
-      previousData,
-      updatedData,
+  const res: any = await duplicateData.findOne({
+    where: whereClause,
+    attributes: attributeData,
+    include: includeCondition,
+  });
+
+  if (!res) {
+    throw new Error("Opname niet gevonden");
+  }
+
+  // For roleId 3, fetch previous data from employee table, updated from duplicateData
+  let previousData;
+  let updatedData;
+
+  if (roleId === 3) {
+    previousData = res.employee; // original/original employee data
+    updatedData = res.get();     // updated/pending data in duplicateData
+  } else {
+    previousData = res?.users?.get() || null;
+
+    updatedData = {
+      id: res.id,
+      name: res?.users?.name || null,
+      email: res?.users?.email || null,
+      roleData: res.get(),
     };
+  }
 
-    return resp;
+  return {
+    previousData,
+    updatedData,
   };
+};
+
 
   public updateProfileUpdateReq = async (
     data: any,
