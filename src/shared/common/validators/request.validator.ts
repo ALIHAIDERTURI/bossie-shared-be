@@ -36,14 +36,16 @@ export const viewProfileUpdatingRequestSchema = Joi.object({
 });
 
 export const getUpdateReqInfoSchema = Joi.object({
-  id: Joi.number().integer().required(),
+  id: Joi.number().integer().optional(),
   roleId: Joi.number().integer().required(),
+  userId: Joi.number().integer().optional(),
 });
 
 export const updateProfileUpdateReqSchema = Joi.object({
-  id: Joi.number().integer().required(),
+  id: Joi.number().integer().optional(),
   adminId: Joi.number().integer().required(),
   userId: Joi.number().integer().required(),
   statusId: Joi.number().integer().required(),
   roleId: Joi.number().integer().required(),
+  rejectionReason: Joi.string().allow("").optional(),
 });

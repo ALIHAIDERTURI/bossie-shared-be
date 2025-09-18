@@ -1,6 +1,7 @@
 import { sequelize } from "@src/config/database";
 import {
   admin,
+  adminLog,
   duplicateData,
   employee,
   notifications,
@@ -543,7 +544,7 @@ export class RequestService {
             as: "users",
             model: users,
             where: { roleId }, // Fetch based on roleId 1 or 2
-            attributes: ["id", "name", "roleId"],
+            attributes: ["id", "name", "roleId", "phone"],
             include: [
               {
                 as: "roleData",
@@ -578,16 +579,85 @@ export class RequestService {
         ? { employeeId: { [Op.not]: null } } // Fetch employee data
         : { userId: { [Op.not]: null } }; // Fetch user data for roleId 1 or 2
 
-    return await duplicateData.findAndCountAll({
-      attributes: ["id", "userId", "employeeId"], // Include both userId and empId
+    const res = await duplicateData.findAndCountAll({
+      attributes: ["id", "userId", "employeeId", "createdAt"], // Include both userId and empId
       where: whereClause,
       order: [["createdAt", "DESC"]], // Ensure only relevant records are fetched
       include: includeCondition,
     });
+
+    // Enhance rows with warnings and additional fields
+    const enhancedRows = await Promise.all(
+      res.rows.map(async (request: any) => {
+        let warnings = { total: 0, mute: 0, suspend: 0 };
+        let phone = null;
+        let chamberCommerceNumber = null;
+
+        if (request.users) {
+          // For freelancers and companies
+          const warningCounts = await userLog.findAll({
+            where: { userId: request.users.id },
+            attributes: [
+              [Sequelize.fn('COUNT', Sequelize.literal('CASE WHEN isMuted = true THEN 1 END')), 'muteCount'],
+              [Sequelize.fn('COUNT', Sequelize.literal('CASE WHEN isSuspend = true THEN 1 END')), 'suspendCount']
+            ],
+            raw: true
+          });
+
+          const warningData: any = warningCounts[0] || { muteCount: 0, suspendCount: 0 };
+          const muteCount = parseInt(warningData.muteCount) || 0;
+          const suspendCount = parseInt(warningData.suspendCount) || 0;
+
+          warnings = {
+            total: muteCount + suspendCount,
+            mute: muteCount,
+            suspend: suspendCount
+          };
+
+          phone = request.users.phone;
+          chamberCommerceNumber = request.users.roleData?.chamberCommerceNumber || null;
+        } else if (request.employee) {
+          // For employees
+          const warningCounts = await userLog.findAll({
+            where: { employeeId: request.employee.id },
+            attributes: [
+              [Sequelize.fn('COUNT', Sequelize.literal('CASE WHEN isMuted = true THEN 1 END')), 'muteCount'],
+              [Sequelize.fn('COUNT', Sequelize.literal('CASE WHEN isSuspend = true THEN 1 END')), 'suspendCount']
+            ],
+            raw: true
+          });
+
+          const warningData: any = warningCounts[0] || { muteCount: 0, suspendCount: 0 };
+          const muteCount = parseInt(warningData.muteCount) || 0;
+          const suspendCount = parseInt(warningData.suspendCount) || 0;
+
+          warnings = {
+            total: muteCount + suspendCount,
+            mute: muteCount,
+            suspend: suspendCount
+          };
+
+          phone = request.employee.phone;
+        }
+
+        return {
+          ...request.toJSON(),
+          submittedAt: request.createdAt,
+          phone,
+          chamberCommerceNumber,
+          warnings
+        };
+      })
+    );
+
+    return {
+      count: res.count,
+      rows: enhancedRows
+    };
   };
 
   public getUpdateReqInfo = async (data: any): Promise<any> => {
-    const { id, roleId } = data;
+    const { id, roleId, userId } = data;
 
     // Define attributes based on roleId
     let attributeData: any;
@@ -680,8 +750,21 @@ export class RequestService {
         throw new Error("Ongeldige rol-ID");
     }
 
+    // Build where clause based on whether id and userId are provided
+    const whereClause: any = {};
+    if (id) {
+      whereClause.id = id;
+    }
+    if (userId) {
+      if (roleId === 3) {
+        whereClause.employeeId = userId;
+      } else {
+        whereClause.userId = userId;
+      }
+    }
+
     const res: any = await duplicateData.findOne({
-      where: { id },
+      where: whereClause,
       attributes: attributeData, // Only necessary attributes from duplicateData
       include: includeCondition, // Include based on roleId
     });
@@ -692,17 +775,26 @@ export class RequestService {
     // Use .get() to convert Sequelize instances to plain objects
     const previousData =
       roleId !== 3 ? res?.users?.get() || null : res.employee;
-    const updatedData = res.get();
+    
+    // Format updatedData to match previousData structure
+    let updatedData: any;
+    if (roleId !== 3) {
+      // For freelancers and companies, format like previousData with nested roleData
+      updatedData = {
+        id: res.id,
+        name: res?.users?.name || null,
+        email: res?.users?.email || null,
+        roleData: res.get()
+      };
+    } else {
+      // For employees, use the employee data directly
+      updatedData = res.employee;
+    }
 
     const resp: any = {
       previousData,
       updatedData,
     };
-
-    // Remove the `users` property from `updatedData` only if roleId is not 3
-    if (roleId !== 3 && resp.updatedData?.users) {
-      delete resp.updatedData.users;
-    }
 
     return resp;
   };
@@ -711,7 +803,30 @@ export class RequestService {
     data: any,
     transaction: Transaction
   ): Promise<any> => {
-    const { adminId, id, userId, roleId, statusId } = data;
+    const { adminId, id, userId, roleId, statusId, rejectionReason } = data;
+
+    // Auto-fetch duplicateData ID if not provided
+    let duplicateDataId = id;
+    if (!duplicateDataId) {
+      const whereClause: any = {};
+      if (roleId === 3) {
+        whereClause.employeeId = userId;
+      } else {
+        whereClause.userId = userId;
+      }
+      
+      const duplicateRecord = await duplicateData.findOne({
+        where: whereClause,
+        attributes: ['id'],
+        order: [['createdAt', 'DESC']] // Get the most recent request
+      });
+      
+      if (!duplicateRecord) {
+        throw new Error("No profile update request found for this user");
+      }
+      
+      duplicateDataId = duplicateRecord.id;
+    }
 
     // Attribute selection based on roleId
     const attributeMap: Record<number, string[]> = {
@@ -756,7 +871,7 @@ export class RequestService {
 
     // Fetch duplicate data and filter out null values
     const allDupData: any = await duplicateData.findOne({
-      where: { id },
+      where: { id: duplicateDataId },
       attributes: attributeData,
     });
     if (!allDupData) {
@@ -807,7 +922,7 @@ export class RequestService {
     const contentValue =
       statusId == 1
         ? "Uw verzoek tot profielupdate is goedgekeurd"
-        : "Uw verzoek om profielupdate is afgewezen";
+        : `Uw verzoek om profielupdate is afgewezen${rejectionReason ? ` - Reden: ${rejectionReason}` : ''}`;
     const roleType = roleId == 3 ? "employeeId" : "userId";
 
     await userNotification.create(
@@ -830,14 +945,35 @@ export class RequestService {
     );
     var userData: any;
 
+    // Update profileStatus based on approval/rejection
+    const newProfileStatus = statusId === 1 ? 3 : 4; // 3 = Approved, 4 = Rejected
+    
     if (roleId == 1 || roleId == 2) {
-      await users.update({ profileStatus: 3 }, { where: { id: userId }, transaction })
+      const updateData: any = { profileStatus: newProfileStatus };
+      if (statusId === 2 && rejectionReason) {
+        updateData.rejectionReason = rejectionReason;
+      }
+      await users.update(updateData, { where: { id: userId }, transaction })
       userData = await users.findOne({ where: { id: userId, roleId: roleId }, attributes: ["fcmToken"] })
     } else {
-      await employee.update({ profileStatus: 3 }, { where: { id: userId }, transaction })
+      const updateData: any = { profileStatus: newProfileStatus };
+      if (statusId === 2 && rejectionReason) {
+        updateData.rejectionReason = rejectionReason;
+      }
+      await employee.update(updateData, { where: { id: userId }, transaction })
       userData = await employee.findOne({ where: { id: userId }, attributes: ["fcmToken"] })
-
     }
+
+    // Log admin activity
+    const activityDescription = statusId === 1 
+      ? `Approved profile update request for user ID ${userId}` 
+      : `Rejected profile update request for user ID ${userId}${rejectionReason ? ` - Reason: ${rejectionReason}` : ''}`;
+    
+    await adminLog.create({
+      adminId,
+      suspendReason: activityDescription,
+      isSuspend: false, // This is not a suspension, just activity logging
+    }, { transaction });
 
     const pushRes: any = await sendPushNotification(
       userData.fcmToken,
@@ -855,6 +991,6 @@ export class RequestService {
     //   // image: null,
     // });
     // Remove the entry from duplicateData after updating
-    await duplicateData.destroy({ where: { id }, transaction });
+    await duplicateData.destroy({ where: { id: duplicateDataId }, transaction });
   };
 }

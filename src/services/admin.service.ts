@@ -664,7 +664,7 @@ export class AdminService {
     if (filters?.type) {
       const typeFilters = typeof filters.type === 'string' ? filters.type.split(',') : [filters.type];
       const typeConditions: any[] = [];
-      const validTypes = ['verified', 'unVerified', 'mute', 'suspend', 'approved', 'muted'];
+      const validTypes = ['verified', 'unVerified', 'mute', 'suspend', 'approved', 'muted', 'rejected', 'isInEditing'];
 
       const invalidTypes = typeFilters.filter((type: string) => {
         const trimmedType = type.trim();
@@ -747,6 +747,16 @@ export class AdminService {
                    ))`
                 )
               }
+            });
+            break;
+          case "rejected":
+            typeConditions.push({
+              "profileStatus": 4,
+            });
+            break;
+          case "isInEditing":
+            typeConditions.push({
+              "profileStatus": 7,
             });
             break;
         }
@@ -879,7 +889,7 @@ export class AdminService {
     
     const res: any = await users.findAndCountAll({
       where: { roleId: 1, deletedAt: null, ...whereClause },
-      attributes: ["id", "roleId", "name", "email", "phone", "profileStatus"],
+      attributes: ["id", "roleId", "name", "email", "phone", "profileStatus", "createdAt", "updatedAt"],
       include: [
         {
           model: roleData,
@@ -961,11 +971,11 @@ export class AdminService {
       }
     }
 
-    let whereClause: any = [];
+    let whereClause: any = {};
     if (filters?.type) {
       const typeFilters = typeof filters.type === 'string' ? filters.type.split(',') : [filters.type];
       const typeConditions: any[] = [];
-      const validTypes = ['verified', 'unVerified', 'mute', 'suspend', 'approved', 'muted'];
+      const validTypes = ['verified', 'unVerified', 'mute', 'suspend', 'approved', 'muted', 'rejected', 'isInEditingState'];
 
       const invalidTypes = typeFilters.filter((type: string) => {
         const trimmedType = type.trim();
@@ -1048,6 +1058,16 @@ export class AdminService {
                    ))`
                 )
               }
+            });
+            break;
+          case "rejected":
+            typeConditions.push({
+              "profileStatus": 4,
+            });
+            break;
+          case "isInEditingState":
+            typeConditions.push({
+              "profileStatus": 7,
             });
             break;
         }
@@ -1849,7 +1869,7 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
     if (filters?.type) {
       const typeFilters = typeof filters.type === 'string' ? filters.type.split(',') : [filters.type];
       const typeConditions: any[] = [];
-      const validTypes = ['verified', 'unVerified', 'mute', 'suspend', 'approved', 'muted'];
+      const validTypes = ['verified', 'unVerified', 'mute', 'suspend', 'approved', 'muted', 'rejected', 'isInEditingState'];
 
       const invalidTypes = typeFilters.filter((type: string) => {
         const trimmedType = type.trim();
@@ -1932,6 +1952,16 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
                    ))`
                 )
               }
+            });
+            break;
+          case "rejected":
+            typeConditions.push({
+              "profileStatus": 4,
+            });
+            break;
+          case "isInEditingState":
+            typeConditions.push({
+              "profileStatus": 7,
             });
             break;
         }
@@ -2064,7 +2094,7 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
     
     const res: any = await users.findAndCountAll({
       where: { roleId: 2, deletedAt: null, ...whereClause }, // Changed to roleId: 2 for companies
-      attributes: ["id", "roleId", "name", "email", "phone", "profileStatus"],
+      attributes: ["id", "roleId", "name", "email", "phone", "profileStatus", "createdAt", "updatedAt"],
       include: [
         {
           model: roleData,
