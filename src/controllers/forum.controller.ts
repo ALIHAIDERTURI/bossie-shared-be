@@ -305,6 +305,13 @@ export class ForumController {
       const data = await updateCategorySchema.validateAsync(body);
       const response: any = await this.__service.updateCategory(data);
 
+ // Dynamic message based on flags
+    if (data.isDelete) {
+      message = "data archived/soft deleted successfully.";
+    } else if (data.isResume) {
+      message = "data unarchived successfully.";
+    }
+
       res.status(200).json({
         statusCode: 200,
         message,
