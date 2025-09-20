@@ -54,3 +54,14 @@ forumRouter.post("/updateCategory", (...args: [Request, Response]) =>
 forumRouter.post("/report", (...args: [Request, Response]) =>
   forumController.report(...args)
 );
+
+
+/**
+ * Banned Keywords / Auto Spam Filter
+ */
+forumRouter.post("/bannedKeywords/add", forumController.addBannedKeyword);
+forumRouter.post("/bannedKeywords/remove", forumController.removeBannedKeyword);
+forumRouter.get("/bannedKeywords/list", forumController.listBannedKeywords);
+
+// Get filtered messages for a thread/room
+forumRouter.get("/messages/filtered/:roomId", forumController.getFilteredMessages);

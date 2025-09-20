@@ -22,6 +22,7 @@ import {
   appInfo,
   moderatorPermissions,
   toxicityScores,
+  bannedKeywords
 } from ".";
 
 type ModelType = any;
@@ -49,6 +50,7 @@ export * from "./userNotification";
 export * from "./appInfo";
 export * from "./moderatorPermissions";
 export * from "./toxicityScores";
+export * from "./bannedKeywords";
 
 export const models: ModelType = [
   users,
@@ -73,5 +75,6 @@ export const models: ModelType = [
   userNotification,
   appInfo,
   moderatorPermissions,
-  toxicityScores,
+  toxicityScores,  
+  bannedKeywords
 ];

@@ -132,3 +132,13 @@ export const reportSchema = Joi.object({
   problem: Joi.string().optional(),
   messageDetail: Joi.object().optional().allow(null, {}),
 });
+
+
+
+export const addBannedKeywordSchema = Joi.object({
+  keyword: Joi.string().trim().min(1).required(),
+});
+
+export const removeBannedKeywordSchema = Joi.object({
+  id: Joi.number().integer().required(),
+});

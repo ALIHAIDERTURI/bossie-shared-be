@@ -12,6 +12,8 @@ import {
   readMessageSchema,
   reportSchema,
   updateCategorySchema,
+  addBannedKeywordSchema,
+  removeBannedKeywordSchema
 } from "@src/shared/common/validators/forum.validator";
 import {
   defaultSchema,
@@ -361,4 +363,91 @@ export class ForumController {
       });
     }
   };
+
+
+
+  public addBannedKeyword = async (req: Request, res: Response) => {
+    try {
+      let message = "Keyword banned successfully.";
+      const { body } = req;
+
+      const data = await addBannedKeywordSchema.validateAsync(body);
+      const response: any = await this.__service.addBannedKeyword(data);
+
+      res.status(200).json({
+        statusCode: 200,
+        message,
+        response,
+      });
+    } catch (error: any) {
+      res.status(403).send({
+        statusCode: 403,
+        message: error.message,
+      });
+    }
+  };
+
+  public removeBannedKeyword = async (req: Request, res: Response) => {
+    try {
+      let message = "Keyword removed successfully.";
+      const { body } = req;
+
+      const data = await removeBannedKeywordSchema.validateAsync(body);
+      const response: any = await this.__service.removeBannedKeyword(data);
+
+      res.status(200).json({
+        statusCode: 200,
+        message,
+        response,
+      });
+    } catch (error: any) {
+      res.status(403).send({
+        statusCode: 403,
+        message: error.message,
+      });
+    }
+  };
+
+  public listBannedKeywords = async (req: Request, res: Response) => {
+    try {
+      let message = "Banned keywords fetched successfully.";
+      const response: any = await this.__service.listBannedKeywords();
+
+      res.status(200).json({
+        statusCode: 200,
+        message,
+        response,
+      });
+    } catch (error: any) {
+      res.status(403).send({
+        statusCode: 403,
+        message: error.message,
+      });
+    }
+  };
+
+  public getFilteredMessages = async (req: Request, res: Response) => {
+    try {
+      let message = "Filtered messages fetched successfully.";
+      const { roomId } = req.params;
+
+      const response: any = await this.__service.filterMessages(Number(roomId));
+
+      res.status(200).json({
+        statusCode: 200,
+        message,
+        response,
+      });
+    } catch (error: any) {
+      res.status(403).send({
+        statusCode: 403,
+        message: error.message,
+      });
+    }
+  };
+
+
+
+
+
 }

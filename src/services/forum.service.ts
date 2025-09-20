@@ -13,6 +13,7 @@ import {
   notifications,
   userNotification,
   threadLog,
+  bannedKeywords
 } from "@src/models";
 import { globalIo } from "..";
 import { Op, Sequelize, Transaction } from "sequelize";
@@ -911,6 +912,63 @@ export class ForumService {
     await notifications.create({ ...notificationData }, { transaction });
   };
 
+
+  // AutoSpam Filtering
+  
+  public async addBannedKeyword(data: { keyword: string }) {
+    const exists = await bannedKeywords.findOne({ where: { keyword: data.keyword } });
+    if (exists) {
+      throw new Error("Keyword already exists in banned list.");
+    }
+
+    const keyword = await bannedKeywords.create({ keyword: data.keyword });
+    return keyword;
+  }
+
+  public async removeBannedKeyword(data: { id: number }) {
+    const deleted = await bannedKeywords.destroy({ where: { id: data.id } });
+    if (!deleted) {
+      throw new Error("Keyword not found.");
+    }
+    return { deleted: true };
+  }
+
+  public async listBannedKeywords() {
+    const keywords = await bannedKeywords.findAll({ attributes: ["id", "keyword"] });
+    return keywords;
+  }
+
+  public async filterMessages(roomId: number) {
+    // Get banned keywords
+    const banned = await bannedKeywords.findAll({ attributes: ["keyword"] });
+    const bannedList = banned.map((b) => b.keyword.toLowerCase());
+
+    // Fetch messages for the given room
+    const allMessages = await messages.findAll({ where: { roomId } });
+
+    // Filter out spammy ones
+    const filtered = allMessages.map((msg: any) => {
+      const text = msg.message?.toLowerCase() || "";
+      const containsBanned = bannedList.some((word) => text.includes(word));
+
+      if (containsBanned) {
+        return {
+          ...msg.toJSON(),
+          message: "⚠️ This message is auto-hidden as it may contain spam or inappropriate content.",
+        };
+      }
+
+      return msg;
+    });
+
+    return filtered;
+  }
+
+
+
+
+
+
   // Helper functions
 
   private getUserData = async (userId: number, roleId: number) => {
@@ -952,4 +1010,8 @@ export class ForumService {
         return null;
     }
   };
+
+
+
+
 }
