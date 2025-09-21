@@ -1004,10 +1004,86 @@ export class ForumService {
   }));
 };
 
+
+
+  public async getAllDiscussions(): Promise<any> {
+    const res: any = await threads.findAll({
+      include: [
+        {
+          as: "forumCategory",
+          model: forumCategory,
+          attributes: ["id", "name", "icon"],
+        },
+        {
+          as: "forumSubCategory",
+          model: forumSubCategory,
+          attributes: ["id", "name", "description"],
+        },
+        {
+          as: "users",
+          model: users,
+          attributes: ["id", "name"],
+        },
+        {
+          as: "employee",
+          model: employee,
+          attributes: ["id", "firstName", "lastName"],
+        },
+      ],
+      order: [["createdAt", "DESC"]],
+    });
+
+    const formattedData: any = [];
+
+    for (const discussion of res) {
+      const { forumCategory, forumSubCategory, id, title, createdAt, users, employee } = discussion;
+
+      const existingCategory = formattedData.find(
+        (item: any) => item.forumCategory.id === forumCategory.id
+      );
+
+      if (existingCategory) {
+        const existingSubCategory = existingCategory.forumSubCategory.find(
+          (sub: any) => sub.id === forumSubCategory.id
+        );
+
+        if (existingSubCategory) {
+          existingSubCategory.threads.push({ id, title, createdAt, users, employee });
+        } else {
+          existingCategory.forumSubCategory.push({
+            id: forumSubCategory.id,
+            name: forumSubCategory.name,
+            description: forumSubCategory.description,
+            threads: [{ id, title, createdAt, users, employee }],
+          });
+        }
+      } else {
+        formattedData.push({
+          forumCategory: { id: forumCategory.id, name: forumCategory.name, icon: forumCategory.icon },
+          forumSubCategory: [
+            {
+              id: forumSubCategory.id,
+              name: forumSubCategory.name,
+              description: forumSubCategory.description,
+              threads: [{ id, title, createdAt, users, employee }],
+            },
+          ],
+        });
+      }
+    }
+
+    return formattedData;
+  }
+
+
+
+
 // Create a new report
  public async createReport(data: any): Promise<any> {
     return await report.create(data);
   }
+
+
 
 
 

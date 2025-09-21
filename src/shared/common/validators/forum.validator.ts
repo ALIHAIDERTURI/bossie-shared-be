@@ -154,3 +154,6 @@ export const createReportValidator = Joi.object({
   problem: Joi.string().min(5).max(255).required(),
   messageDetail: Joi.object().optional()
 });
+
+
+export const getAllDiscussionsValidator = Joi.object({}).optional();

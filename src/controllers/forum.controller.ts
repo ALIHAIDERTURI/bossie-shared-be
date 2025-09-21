@@ -466,4 +466,14 @@ public getReportedDiscussions = async (req: Request, res: Response) => {
     }
   };
 
+
+public getAllDiscussions = async (req: Request, res: Response) => {
+    try {
+      const data = await this.__service.getAllDiscussions();
+      res.status(200).json({ success: true, data });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  };
+
 }

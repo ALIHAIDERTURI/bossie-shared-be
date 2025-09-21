@@ -80,3 +80,8 @@ forumRouter.post("/forum/report", async (req: Request, res: Response) => {
     return res.status(400).json({ success: false, message: error.message });
   }
 });
+
+
+forumRouter.get("/getAllDiscussions", (...args: [any, any]) =>
+  forumController.getAllDiscussions(...args)
+);
