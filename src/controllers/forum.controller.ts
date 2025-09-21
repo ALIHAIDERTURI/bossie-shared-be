@@ -13,7 +13,8 @@ import {
   reportSchema,
   updateCategorySchema,
   addBannedKeywordSchema,
-  removeBannedKeywordSchema
+  removeBannedKeywordSchema,
+  editThreadValidator 
 } from "@src/shared/common/validators/forum.validator";
 import {
   defaultSchema,
@@ -475,5 +476,23 @@ public getAllDiscussions = async (req: Request, res: Response) => {
       res.status(500).json({ success: false, message: err.message });
     }
   };
+
+
+
+
+  public editThreadPost = async (req: Request, res: Response) => {
+    try {
+      const { error } = editThreadValidator.validate(req.body);
+      if (error) return res.status(400).json({ success: false, message: error.message });
+
+      const result = await this.__service.editThreadPost(req.body);
+      res.status(200).json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  };
+
+
+
 
 }

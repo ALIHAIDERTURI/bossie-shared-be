@@ -1084,6 +1084,63 @@ export class ForumService {
   }
 
 
+// Edit Thread Post
+
+
+  public async editThreadPost(data: any, transaction?: Transaction): Promise<any> {
+    const { threadId, title, description, categoryId, subCategoryId, locked, reason } = data;
+
+    // Check if thread exists
+    const thread = await threads.findByPk(threadId);
+    if (!thread) {
+      throw new Error("Thread not found.");
+    }
+
+    // Check if category exists
+    const category = await forumCategory.findByPk(categoryId);
+    if (!category) throw new Error("Category not found.");
+
+    // Check if subcategory exists
+    const subCategory = await forumSubCategory.findOne({
+      where: { id: subCategoryId, categoryId }
+    });
+    if (!subCategory) throw new Error("Subcategory not found.");
+
+    // Update thread
+    await thread.update({ title, description, categoryId, subCategoryId, locked }, { transaction });
+
+    // Fetch users who participated in messages
+    const participantMessages = await messages.findAll({ where: { roomId: threadId } });
+
+    const userIds: Set<number> = new Set();
+    const empIds: Set<number> = new Set();
+
+    participantMessages.forEach(msg => {
+      if (msg.userId) userIds.add(msg.userId);
+      if (msg.empId) empIds.add(msg.empId);
+    });
+
+    // TODO: Send notification to thread owner
+    const ownerNotificationTargets = thread.roleId === 3 ? [thread.ownerEmpId] : [thread.ownerId];
+
+    // TODO: Send notification to participants
+    // Example structure:
+    // for (const userId of userIds) sendNotification(userId, `Your thread was edited: ${reason}`);
+    // for (const empId of empIds) sendNotification(empId, `A thread you participated in was edited: ${reason}`);
+
+    // TODO: Log audit trail
+    // Example: save into a "threadAuditTrail" table with threadId, action, reason, timestamp
+
+    return {
+      success: true,
+      message: "Thread updated successfully",
+      data: { threadId, title, description, categoryId, subCategoryId, locked, reason }
+    };
+  }
+
+
+
+
 
 
 

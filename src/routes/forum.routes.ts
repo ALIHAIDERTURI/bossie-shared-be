@@ -85,3 +85,7 @@ forumRouter.post("/forum/report", async (req: Request, res: Response) => {
 forumRouter.get("/getAllDiscussions", (...args: [any, any]) =>
   forumController.getAllDiscussions(...args)
 );
+
+// Edit Thread Post
+
+forumRouter.put("/editThreadPost", (req, res) => forumController.editThreadPost(req, res));
