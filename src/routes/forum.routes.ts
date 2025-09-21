@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { forumController } from "../controllers";
 import { createReportValidator } from "@src/shared/common/validators/forum.validator";
+import { addAdminCommentValidator } from "@src/shared/common/validators/forum.validator";
 
 export const forumRouter: Router = Router();
 
@@ -89,3 +90,12 @@ forumRouter.get("/getAllDiscussions", (...args: [any, any]) =>
 // Edit Thread Post
 
 forumRouter.put("/editThreadPost", (req, res) => forumController.editThreadPost(req, res));
+
+
+// Add Admin Comment
+
+forumRouter.post("/addAdminComment", (req, res) => {
+  const { error } = addAdminCommentValidator.validate(req.body);
+  if (error) return res.status(400).json({ success: false, message: error.message });
+  forumController.addAdminComment(req, res);
+});

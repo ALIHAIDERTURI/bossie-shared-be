@@ -495,4 +495,15 @@ public getAllDiscussions = async (req: Request, res: Response) => {
 
 
 
+  public addAdminComment = async (req: Request, res: Response) => {
+    try {
+      const result = await this.__service.addAdminComment(req.body);
+      res.status(201).json({ success: true, data: result });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  };
+
+
+
 }

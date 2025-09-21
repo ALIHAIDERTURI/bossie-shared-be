@@ -167,3 +167,13 @@ export const editThreadValidator = Joi.object({
   locked: Joi.boolean().required(),
   reason: Joi.string().min(5).max(255).required()
 });
+
+
+export const addAdminCommentValidator = Joi.object({
+  threadId: Joi.number().required(),
+  adminId: Joi.number().required(),
+  roleId: Joi.number().required(), // e.g., 1 = admin, 2 = moderator
+  message: Joi.string().min(1).max(1000).required(),
+  img: Joi.string().optional(),
+  userId: Joi.number().allow(null).optional()
+});

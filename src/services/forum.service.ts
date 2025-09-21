@@ -1139,6 +1139,36 @@ export class ForumService {
   }
 
 
+// Add Admin Comment
+
+
+
+  public async addAdminComment(data: {
+    threadId: number;
+    adminId: number;
+    roleId: number;
+    message: string;
+    img?: string;
+  }, transaction?: Transaction): Promise<any> {
+    // check if thread exists
+    const thread = await threads.findByPk(data.threadId);
+    if (!thread) {
+      throw new Error("Thread not found");
+    }
+
+    // create admin message
+    const adminMessage = await messages.create({
+      roomId: thread.id,
+      empId: data.adminId, // assuming admin is in employee table
+      roleId: data.roleId,
+      message: data.message,
+      img: data.img || "",
+      userId: null // admin message not linked to normal user
+    }, { transaction });
+
+    return adminMessage;
+  }
+
 
 
 
