@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import { forumController } from "../controllers";
+import { createReportValidator } from "@src/shared/common/validators/forum.validator";
 
 export const forumRouter: Router = Router();
 
@@ -65,3 +66,17 @@ forumRouter.get("/bannedKeywords/list", forumController.listBannedKeywords);
 
 // Get filtered messages for a thread/room
 forumRouter.get("/messages/filtered/:roomId", forumController.getFilteredMessages);
+
+
+forumRouter.get("/reportedDiscussions", forumController.getReportedDiscussions);
+
+// create a post
+// Create a report
+forumRouter.post("/forum/report", async (req: Request, res: Response) => {
+  try {
+    await createReportValidator.validateAsync(req.body);
+    return forumController.createReport(req, res);
+  } catch (error: any) {
+    return res.status(400).json({ success: false, message: error.message });
+  }
+});

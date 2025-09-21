@@ -968,6 +968,48 @@ export class ForumService {
 
 
 
+  public getReportedDiscussions = async (): Promise<any> => {
+  const reports = await report.findAll({
+    include: [
+      {
+        as: "threads",
+        model: threads,
+        attributes: ["id", "title", "description", "createdAt"]
+      },
+      {
+        as: "privateThreads",
+        model: privateThreads,
+        attributes: ["id", "title", "createdAt"]
+      }
+    ],
+    order: [["createdAt", "DESC"]]
+  });
+
+  return reports.map((r: any) => ({
+    id: r.id,
+    problem: r.problem,
+    statusId: r.statusId,
+    createdAt: r.createdAt,
+    reportedThread: r.reportedThreadId ? r.threads : null,
+    reportedPrivateThread: r.reportedP_ThreadId ? r.privateThreads : null,
+    reporter: {
+      userId: r.userId,
+      roleId: r.roleId
+    },
+    reportedUser: {
+      userId: r.reportedUserId,
+      roleId: r.reportedRoleId
+    },
+    messageDetail: r.messageDetail
+  }));
+};
+
+// Create a new report
+ public async createReport(data: any): Promise<any> {
+    return await report.create(data);
+  }
+
+
 
   // Helper functions
 

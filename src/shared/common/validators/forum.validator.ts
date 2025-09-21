@@ -142,3 +142,15 @@ export const addBannedKeywordSchema = Joi.object({
 export const removeBannedKeywordSchema = Joi.object({
   id: Joi.number().integer().required(),
 });
+
+
+export const createReportValidator = Joi.object({
+  userId: Joi.number().required(),
+  reportedUserId: Joi.number().required(),
+  roleId: Joi.number().required(),
+  reportedRoleId: Joi.number().required(),
+  reportedThreadId: Joi.number().optional(),
+  reportedP_ThreadId: Joi.number().allow(null).optional(),
+  problem: Joi.string().min(5).max(255).required(),
+  messageDetail: Joi.object().optional()
+});

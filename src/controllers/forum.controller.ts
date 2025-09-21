@@ -447,7 +447,23 @@ export class ForumController {
   };
 
 
+public getReportedDiscussions = async (req: Request, res: Response) => {
+  try {
+    const data = await this.__service.getReportedDiscussions();
+    res.status(200).json({ success: true, data });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
 
 
+ public createReport = async (req: Request, res: Response) => {
+    try {
+      const result = await this.__service.createReport(req.body);
+      res.status(201).json({ success: true, data: result });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  };
 
 }
