@@ -177,3 +177,22 @@ export const addAdminCommentValidator = Joi.object({
   img: Joi.string().optional(),
   userId: Joi.number().allow(null).optional()
 });
+
+
+
+
+export const getFilteredThreadsSchema = Joi.object({
+  limit: Joi.number().integer().min(1).max(100).default(10),
+  offset: Joi.number().integer().min(0).default(0),
+  filters: Joi.object({
+    user: Joi.string().optional(),
+    title: Joi.string().optional(),
+    status: Joi.string().valid("open", "closed").optional(),
+    flags: Joi.object({
+      suggested: Joi.boolean().optional(),
+      pinned: Joi.boolean().optional(),
+    }).optional(),
+    dateFrom: Joi.date().optional(),
+    dateTo: Joi.date().optional(),
+  }).optional()
+}).optional();

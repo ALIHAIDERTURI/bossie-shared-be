@@ -27,6 +27,8 @@ export interface threadsI {
   description?: string;
   logo?: string;
   locked?: boolean;
+  suggested?: boolean;
+  pinned?: boolean;
   createdAt?: Date;
   updatedAt?: Date;
   deletedAt?: Date | null;
@@ -92,6 +94,18 @@ export class threads extends Model<threadsI> {
   })
   public locked: boolean;
 
+  @Column({
+    type: DataType.TINYINT,
+    defaultValue: 0,
+  })
+  public suggested: boolean;
+
+  @Column({
+    type: DataType.TINYINT,
+    defaultValue: 0,
+  })
+  public pinned: boolean;
+
   @Column(DataType.DATE)
   public createdAt: Date;
 
@@ -115,6 +129,7 @@ export class threads extends Model<threadsI> {
   })
   public typeStatusValue: string;
 }
+
 const getTypeStatusValue = (type: any) => {
   if (type === 1) return "Active";
   if (type === 2) return "Archived";

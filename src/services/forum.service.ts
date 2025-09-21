@@ -1171,6 +1171,81 @@ export class ForumService {
 
 
 
+// Search and Filter
+
+
+
+  
+  public async getFilteredThreads(query: any) {
+    const { limit = 10, offset = 0, filters = {} } = query;
+    const { user, title, status, flags, dateFrom, dateTo } = filters;
+
+    const whereClause: any = {};
+
+    // Filter by thread title
+    if (title) {
+      whereClause.title = { [Op.like]: `%${title}%` };
+    }
+
+    // Filter by status (locked = closed)
+    if (status === "open") whereClause.locked = false;
+    if (status === "closed") whereClause.locked = true;
+
+    // Filter by date range
+    if (dateFrom || dateTo) {
+      whereClause.createdAt = {};
+      if (dateFrom) whereClause.createdAt[Op.gte] = new Date(dateFrom);
+      if (dateTo) whereClause.createdAt[Op.lte] = new Date(dateTo);
+    }
+
+    // Include flags: suggested / pinned (assuming columns exist)
+    if (flags) {
+      if (typeof flags.suggested !== "undefined") whereClause["suggested"] = flags.suggested;
+      if (typeof flags.pinned !== "undefined") whereClause["pinned"] = flags.pinned;
+    }
+
+    // Search by user name
+    const includeClause: any[] = [
+      {
+        model: users,
+        attributes: ["id", "name"],
+        where: user ? { name: { [Op.like]: `%${user}%` } } : undefined,
+      },
+      {
+        model: employee,
+        attributes: ["id", "firstName", "lastName"],
+        where: user
+          ? Sequelize.where(
+              Sequelize.fn("concat", Sequelize.col("firstName"), " ", Sequelize.col("lastName")),
+              {
+                [Op.like]: `%${user}%`,
+              }
+            )
+          : undefined,
+      },
+    ];
+
+    const { count, rows } = await threads.findAndCountAll({
+      where: whereClause,
+      include: includeClause,
+      limit,
+      offset,
+      order: [["createdAt", "desc"]],
+    });
+
+    return {
+      total: count,
+      limit,
+      offset,
+      data: rows,
+    };
+  }
+
+
+
+
+
+
 
 
 

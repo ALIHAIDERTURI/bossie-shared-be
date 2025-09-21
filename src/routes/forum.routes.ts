@@ -99,3 +99,10 @@ forumRouter.post("/addAdminComment", (req, res) => {
   if (error) return res.status(400).json({ success: false, message: error.message });
   forumController.addAdminComment(req, res);
 });
+
+
+
+// Search & filter threads
+forumRouter.get("/filterThreads", (req, res) => forumController.getFilteredThreads(req, res));
+
+
