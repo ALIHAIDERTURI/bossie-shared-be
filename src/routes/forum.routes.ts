@@ -106,3 +106,5 @@ forumRouter.post("/addAdminComment", (req, res) => {
 forumRouter.get("/filterThreads", (req, res) => forumController.getFilteredThreads(req, res));
 
 
+// Delete / Hide Post
+forumRouter.post("/forum/post/moderate", (req, res) => forumController.deleteOrHidePost(req, res));
