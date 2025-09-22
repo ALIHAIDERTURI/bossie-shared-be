@@ -12,6 +12,9 @@ import {
   readMessageSchema,
   reportSchema,
   updateCategorySchema,
+  addBannedKeywordSchema,
+  removeBannedKeywordSchema,
+  editThreadValidator 
 } from "@src/shared/common/validators/forum.validator";
 import {
   defaultSchema,
@@ -305,6 +308,13 @@ export class ForumController {
       const data = await updateCategorySchema.validateAsync(body);
       const response: any = await this.__service.updateCategory(data);
 
+ // Dynamic message based on flags
+    if (data.isDelete) {
+      message = "data archived/soft deleted successfully.";
+    } else if (data.isResume) {
+      message = "data unarchived successfully.";
+    }
+
       res.status(200).json({
         statusCode: 200,
         message,
@@ -354,4 +364,160 @@ export class ForumController {
       });
     }
   };
+
+
+
+  public addBannedKeyword = async (req: Request, res: Response) => {
+    try {
+      let message = "Keyword banned successfully.";
+      const { body } = req;
+
+      const data = await addBannedKeywordSchema.validateAsync(body);
+      const response: any = await this.__service.addBannedKeyword(data);
+
+      res.status(200).json({
+        statusCode: 200,
+        message,
+        response,
+      });
+    } catch (error: any) {
+      res.status(403).send({
+        statusCode: 403,
+        message: error.message,
+      });
+    }
+  };
+
+  public removeBannedKeyword = async (req: Request, res: Response) => {
+    try {
+      let message = "Keyword removed successfully.";
+      const { body } = req;
+
+      const data = await removeBannedKeywordSchema.validateAsync(body);
+      const response: any = await this.__service.removeBannedKeyword(data);
+
+      res.status(200).json({
+        statusCode: 200,
+        message,
+        response,
+      });
+    } catch (error: any) {
+      res.status(403).send({
+        statusCode: 403,
+        message: error.message,
+      });
+    }
+  };
+
+  public listBannedKeywords = async (req: Request, res: Response) => {
+    try {
+      let message = "Banned keywords fetched successfully.";
+      const response: any = await this.__service.listBannedKeywords();
+
+      res.status(200).json({
+        statusCode: 200,
+        message,
+        response,
+      });
+    } catch (error: any) {
+      res.status(403).send({
+        statusCode: 403,
+        message: error.message,
+      });
+    }
+  };
+
+  public getFilteredMessages = async (req: Request, res: Response) => {
+    try {
+      let message = "Filtered messages fetched successfully.";
+      const { roomId } = req.params;
+
+      const response: any = await this.__service.filterMessages(Number(roomId));
+
+      res.status(200).json({
+        statusCode: 200,
+        message,
+        response,
+      });
+    } catch (error: any) {
+      res.status(403).send({
+        statusCode: 403,
+        message: error.message,
+      });
+    }
+  };
+
+
+public getReportedDiscussions = async (req: Request, res: Response) => {
+  try {
+    const data = await this.__service.getReportedDiscussions();
+    res.status(200).json({ success: true, data });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+
+ public createReport = async (req: Request, res: Response) => {
+    try {
+      const result = await this.__service.createReport(req.body);
+      res.status(201).json({ success: true, data: result });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  };
+
+
+public getAllDiscussions = async (req: Request, res: Response) => {
+    try {
+      const data = await this.__service.getAllDiscussions();
+      res.status(200).json({ success: true, data });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  };
+
+
+
+
+  public editThreadPost = async (req: Request, res: Response) => {
+    try {
+      const { error } = editThreadValidator.validate(req.body);
+      if (error) return res.status(400).json({ success: false, message: error.message });
+
+      const result = await this.__service.editThreadPost(req.body);
+      res.status(200).json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  };
+
+
+
+
+  public addAdminComment = async (req: Request, res: Response) => {
+    try {
+      const result = await this.__service.addAdminComment(req.body);
+      res.status(201).json({ success: true, data: result });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  };
+
+// Search and Filter
+
+
+
+  public getFilteredThreads = async (req: Request, res: Response) => {
+    try {
+      const data = await this.__service.getFilteredThreads(req.query);
+      res.status(200).json({ success: true, data });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  };
+
+
+
+
 }

@@ -132,3 +132,67 @@ export const reportSchema = Joi.object({
   problem: Joi.string().optional(),
   messageDetail: Joi.object().optional().allow(null, {}),
 });
+
+
+
+export const addBannedKeywordSchema = Joi.object({
+  keyword: Joi.string().trim().min(1).required(),
+});
+
+export const removeBannedKeywordSchema = Joi.object({
+  id: Joi.number().integer().required(),
+});
+
+
+export const createReportValidator = Joi.object({
+  userId: Joi.number().required(),
+  reportedUserId: Joi.number().required(),
+  roleId: Joi.number().required(),
+  reportedRoleId: Joi.number().required(),
+  reportedThreadId: Joi.number().optional(),
+  reportedP_ThreadId: Joi.number().allow(null).optional(),
+  problem: Joi.string().min(5).max(255).required(),
+  messageDetail: Joi.object().optional()
+});
+
+
+export const getAllDiscussionsValidator = Joi.object({}).optional();
+
+export const editThreadValidator = Joi.object({
+  threadId: Joi.number().required(),
+  title: Joi.string().min(3).max(255).required(),
+  description: Joi.string().min(5).max(5000).required(),
+  categoryId: Joi.number().required(),
+  subCategoryId: Joi.number().required(),
+  locked: Joi.boolean().required(),
+  reason: Joi.string().min(5).max(255).required()
+});
+
+
+export const addAdminCommentValidator = Joi.object({
+  threadId: Joi.number().required(),
+  adminId: Joi.number().required(),
+  roleId: Joi.number().required(), // e.g., 1 = admin, 2 = moderator
+  message: Joi.string().min(1).max(1000).required(),
+  img: Joi.string().optional(),
+  userId: Joi.number().allow(null).optional()
+});
+
+
+
+
+export const getFilteredThreadsSchema = Joi.object({
+  limit: Joi.number().integer().min(1).max(100).default(10),
+  offset: Joi.number().integer().min(0).default(0),
+  filters: Joi.object({
+    user: Joi.string().optional(),
+    title: Joi.string().optional(),
+    status: Joi.string().valid("open", "closed").optional(),
+    flags: Joi.object({
+      suggested: Joi.boolean().optional(),
+      pinned: Joi.boolean().optional(),
+    }).optional(),
+    dateFrom: Joi.date().optional(),
+    dateTo: Joi.date().optional(),
+  }).optional()
+}).optional();

@@ -13,6 +13,7 @@ import {
   notifications,
   userNotification,
   threadLog,
+  bannedKeywords
 } from "@src/models";
 import { globalIo } from "..";
 import { Op, Sequelize, Transaction } from "sequelize";
@@ -911,6 +912,343 @@ export class ForumService {
     await notifications.create({ ...notificationData }, { transaction });
   };
 
+
+  // AutoSpam Filtering
+  
+  public async addBannedKeyword(data: { keyword: string }) {
+    const exists = await bannedKeywords.findOne({ where: { keyword: data.keyword } });
+    if (exists) {
+      throw new Error("Keyword already exists in banned list.");
+    }
+
+    const keyword = await bannedKeywords.create({ keyword: data.keyword });
+    return keyword;
+  }
+
+  public async removeBannedKeyword(data: { id: number }) {
+    const deleted = await bannedKeywords.destroy({ where: { id: data.id } });
+    if (!deleted) {
+      throw new Error("Keyword not found.");
+    }
+    return { deleted: true };
+  }
+
+  public async listBannedKeywords() {
+    const keywords = await bannedKeywords.findAll({ attributes: ["id", "keyword"] });
+    return keywords;
+  }
+
+  public async filterMessages(roomId: number) {
+    // Get banned keywords
+    const banned = await bannedKeywords.findAll({ attributes: ["keyword"] });
+    const bannedList = banned.map((b) => b.keyword.toLowerCase());
+
+    // Fetch messages for the given room
+    const allMessages = await messages.findAll({ where: { roomId } });
+
+    // Filter out spammy ones
+    const filtered = allMessages.map((msg: any) => {
+      const text = msg.message?.toLowerCase() || "";
+      const containsBanned = bannedList.some((word) => text.includes(word));
+
+      if (containsBanned) {
+        return {
+          ...msg.toJSON(),
+          message: "⚠️ This message is auto-hidden as it may contain spam or inappropriate content.",
+        };
+      }
+
+      return msg;
+    });
+
+    return filtered;
+  }
+
+
+
+
+
+  public getReportedDiscussions = async (): Promise<any> => {
+  const reports = await report.findAll({
+    include: [
+      {
+        as: "threads",
+        model: threads,
+        attributes: ["id", "title", "description", "createdAt"]
+      },
+      {
+        as: "privateThreads",
+        model: privateThreads,
+        attributes: ["id", "title", "createdAt"]
+      }
+    ],
+    order: [["createdAt", "DESC"]]
+  });
+
+  return reports.map((r: any) => ({
+    id: r.id,
+    problem: r.problem,
+    statusId: r.statusId,
+    createdAt: r.createdAt,
+    reportedThread: r.reportedThreadId ? r.threads : null,
+    reportedPrivateThread: r.reportedP_ThreadId ? r.privateThreads : null,
+    reporter: {
+      userId: r.userId,
+      roleId: r.roleId
+    },
+    reportedUser: {
+      userId: r.reportedUserId,
+      roleId: r.reportedRoleId
+    },
+    messageDetail: r.messageDetail
+  }));
+};
+
+
+
+  public async getAllDiscussions(): Promise<any> {
+    const res: any = await threads.findAll({
+      include: [
+        {
+          as: "forumCategory",
+          model: forumCategory,
+          attributes: ["id", "name", "icon"],
+        },
+        {
+          as: "forumSubCategory",
+          model: forumSubCategory,
+          attributes: ["id", "name", "description"],
+        },
+        {
+          as: "users",
+          model: users,
+          attributes: ["id", "name"],
+        },
+        {
+          as: "employee",
+          model: employee,
+          attributes: ["id", "firstName", "lastName"],
+        },
+      ],
+      order: [["createdAt", "DESC"]],
+    });
+
+    const formattedData: any = [];
+
+    for (const discussion of res) {
+      const { forumCategory, forumSubCategory, id, title, createdAt, users, employee } = discussion;
+
+      const existingCategory = formattedData.find(
+        (item: any) => item.forumCategory.id === forumCategory.id
+      );
+
+      if (existingCategory) {
+        const existingSubCategory = existingCategory.forumSubCategory.find(
+          (sub: any) => sub.id === forumSubCategory.id
+        );
+
+        if (existingSubCategory) {
+          existingSubCategory.threads.push({ id, title, createdAt, users, employee });
+        } else {
+          existingCategory.forumSubCategory.push({
+            id: forumSubCategory.id,
+            name: forumSubCategory.name,
+            description: forumSubCategory.description,
+            threads: [{ id, title, createdAt, users, employee }],
+          });
+        }
+      } else {
+        formattedData.push({
+          forumCategory: { id: forumCategory.id, name: forumCategory.name, icon: forumCategory.icon },
+          forumSubCategory: [
+            {
+              id: forumSubCategory.id,
+              name: forumSubCategory.name,
+              description: forumSubCategory.description,
+              threads: [{ id, title, createdAt, users, employee }],
+            },
+          ],
+        });
+      }
+    }
+
+    return formattedData;
+  }
+
+
+
+
+// Create a new report
+ public async createReport(data: any): Promise<any> {
+    return await report.create(data);
+  }
+
+
+// Edit Thread Post
+
+
+  public async editThreadPost(data: any, transaction?: Transaction): Promise<any> {
+    const { threadId, title, description, categoryId, subCategoryId, locked, reason } = data;
+
+    // Check if thread exists
+    const thread = await threads.findByPk(threadId);
+    if (!thread) {
+      throw new Error("Thread not found.");
+    }
+
+    // Check if category exists
+    const category = await forumCategory.findByPk(categoryId);
+    if (!category) throw new Error("Category not found.");
+
+    // Check if subcategory exists
+    const subCategory = await forumSubCategory.findOne({
+      where: { id: subCategoryId, categoryId }
+    });
+    if (!subCategory) throw new Error("Subcategory not found.");
+
+    // Update thread
+    await thread.update({ title, description, categoryId, subCategoryId, locked }, { transaction });
+
+    // Fetch users who participated in messages
+    const participantMessages = await messages.findAll({ where: { roomId: threadId } });
+
+    const userIds: Set<number> = new Set();
+    const empIds: Set<number> = new Set();
+
+    participantMessages.forEach(msg => {
+      if (msg.userId) userIds.add(msg.userId);
+      if (msg.empId) empIds.add(msg.empId);
+    });
+
+    // TODO: Send notification to thread owner
+    const ownerNotificationTargets = thread.roleId === 3 ? [thread.ownerEmpId] : [thread.ownerId];
+
+    // TODO: Send notification to participants
+    // Example structure:
+    // for (const userId of userIds) sendNotification(userId, `Your thread was edited: ${reason}`);
+    // for (const empId of empIds) sendNotification(empId, `A thread you participated in was edited: ${reason}`);
+
+    // TODO: Log audit trail
+    // Example: save into a "threadAuditTrail" table with threadId, action, reason, timestamp
+
+    return {
+      success: true,
+      message: "Thread updated successfully",
+      data: { threadId, title, description, categoryId, subCategoryId, locked, reason }
+    };
+  }
+
+
+// Add Admin Comment
+
+
+
+  public async addAdminComment(data: {
+    threadId: number;
+    adminId: number;
+    roleId: number;
+    message: string;
+    img?: string;
+  }, transaction?: Transaction): Promise<any> {
+    // check if thread exists
+    const thread = await threads.findByPk(data.threadId);
+    if (!thread) {
+      throw new Error("Thread not found");
+    }
+
+    // create admin message
+    const adminMessage = await messages.create({
+      roomId: thread.id,
+      empId: data.adminId, // assuming admin is in employee table
+      roleId: data.roleId,
+      message: data.message,
+      img: data.img || "",
+      userId: null // admin message not linked to normal user
+    }, { transaction });
+
+    return adminMessage;
+  }
+
+
+
+// Search and Filter
+
+
+
+  
+  public async getFilteredThreads(query: any) {
+    const { limit = 10, offset = 0, filters = {} } = query;
+    const { user, title, status, flags, dateFrom, dateTo } = filters;
+
+    const whereClause: any = {};
+
+    // Filter by thread title
+    if (title) {
+      whereClause.title = { [Op.like]: `%${title}%` };
+    }
+
+    // Filter by status (locked = closed)
+    if (status === "open") whereClause.locked = false;
+    if (status === "closed") whereClause.locked = true;
+
+    // Filter by date range
+    if (dateFrom || dateTo) {
+      whereClause.createdAt = {};
+      if (dateFrom) whereClause.createdAt[Op.gte] = new Date(dateFrom);
+      if (dateTo) whereClause.createdAt[Op.lte] = new Date(dateTo);
+    }
+
+    // Include flags: suggested / pinned (assuming columns exist)
+    if (flags) {
+      if (typeof flags.suggested !== "undefined") whereClause["suggested"] = flags.suggested;
+      if (typeof flags.pinned !== "undefined") whereClause["pinned"] = flags.pinned;
+    }
+
+    // Search by user name
+    const includeClause: any[] = [
+      {
+        model: users,
+        attributes: ["id", "name"],
+        where: user ? { name: { [Op.like]: `%${user}%` } } : undefined,
+      },
+      {
+        model: employee,
+        attributes: ["id", "firstName", "lastName"],
+        where: user
+          ? Sequelize.where(
+              Sequelize.fn("concat", Sequelize.col("firstName"), " ", Sequelize.col("lastName")),
+              {
+                [Op.like]: `%${user}%`,
+              }
+            )
+          : undefined,
+      },
+    ];
+
+    const { count, rows } = await threads.findAndCountAll({
+      where: whereClause,
+      include: includeClause,
+      limit,
+      offset,
+      order: [["createdAt", "desc"]],
+    });
+
+    return {
+      total: count,
+      limit,
+      offset,
+      data: rows,
+    };
+  }
+
+
+
+
+
+
+
+
+
   // Helper functions
 
   private getUserData = async (userId: number, roleId: number) => {
@@ -952,4 +1290,8 @@ export class ForumService {
         return null;
     }
   };
+
+
+
+
 }

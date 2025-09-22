@@ -6,6 +6,7 @@ import path from "path";
 import * as dotenv from "dotenv";
 import { sequelize } from "../src/config/database";
 import { routes } from "./routes/routes";
+import {forumRouter} from "./routes/forum.routes"
 dotenv.config({ path: ".env" });
 import { authenticateUser } from "./shared/middleware/authMiddleware";
 import * as http from "http";
@@ -25,6 +26,10 @@ app.use(cors());
 
 app.use("/api", routes);
 // app.use("/api", routes);
+
+// only for forumRouters
+app.use("/forum", forumRouter);  
+
 export const server: http.Server = http.createServer(app);
 const io = new Server(server);
 app.use(express.static(path.resolve("./public")));

@@ -1,5 +1,7 @@
 import { Router, Request, Response } from "express";
 import { forumController } from "../controllers";
+import { createReportValidator } from "@src/shared/common/validators/forum.validator";
+import { addAdminCommentValidator } from "@src/shared/common/validators/forum.validator";
 
 export const forumRouter: Router = Router();
 
@@ -54,3 +56,53 @@ forumRouter.post("/updateCategory", (...args: [Request, Response]) =>
 forumRouter.post("/report", (...args: [Request, Response]) =>
   forumController.report(...args)
 );
+
+
+/**
+ * Banned Keywords / Auto Spam Filter
+ */
+forumRouter.post("/bannedKeywords/add", forumController.addBannedKeyword);
+forumRouter.post("/bannedKeywords/remove", forumController.removeBannedKeyword);
+forumRouter.get("/bannedKeywords/list", forumController.listBannedKeywords);
+
+// Get filtered messages for a thread/room
+forumRouter.get("/messages/filtered/:roomId", forumController.getFilteredMessages);
+
+
+forumRouter.get("/reportedDiscussions", forumController.getReportedDiscussions);
+
+// create a post
+// Create a report
+forumRouter.post("/forum/report", async (req: Request, res: Response) => {
+  try {
+    await createReportValidator.validateAsync(req.body);
+    return forumController.createReport(req, res);
+  } catch (error: any) {
+    return res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+
+forumRouter.get("/getAllDiscussions", (...args: [any, any]) =>
+  forumController.getAllDiscussions(...args)
+);
+
+// Edit Thread Post
+
+forumRouter.put("/editThreadPost", (req, res) => forumController.editThreadPost(req, res));
+
+
+// Add Admin Comment
+
+forumRouter.post("/addAdminComment", (req, res) => {
+  const { error } = addAdminCommentValidator.validate(req.body);
+  if (error) return res.status(400).json({ success: false, message: error.message });
+  forumController.addAdminComment(req, res);
+});
+
+
+
+// Search & filter threads
+forumRouter.get("/filterThreads", (req, res) => forumController.getFilteredThreads(req, res));
+
+

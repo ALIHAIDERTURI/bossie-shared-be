@@ -16,7 +16,7 @@ import { employee } from "./employee";
 export interface messagesI {
   id?: number;
   empId?: number;
-  userId?: number;
+  userId?: number | null;
   roomId?: number;
   roleId?: number;
   message?: string;
@@ -48,7 +48,7 @@ export class messages extends Model<messagesI> {
 
   @ForeignKey((): typeof users => users)
   @Column(DataType.INTEGER)
-  public userId: number;
+  public userId: number | null;
 
   @ForeignKey((): typeof employee => employee)
   @Column(DataType.INTEGER)
