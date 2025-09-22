@@ -19,6 +19,7 @@ import { privateMessages } from "./privateMessages";
 import { userLog } from "./userLog";
 import { employee } from "./employee";
 import { admin } from "./admin";
+import { toxicityScores } from "./toxicityScores";   // 👈 added import
 
 export interface userI {
   id?: number;
@@ -83,6 +84,11 @@ export class users extends Model<userI> {
 
   @BelongsTo((): typeof admin => admin)
   public admin: typeof admin;
+
+// 👇 NEW RELATION
+  @HasMany(() => toxicityScores, { as: "toxicityScores" })
+  public toxicityScores: toxicityScores[];
+
 
   @PrimaryKey
   @AutoIncrement
