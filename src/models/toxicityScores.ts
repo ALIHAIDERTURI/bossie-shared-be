@@ -30,17 +30,17 @@ export interface toxicityScoresI {
   timestamps: true,
 })
 export class toxicityScores extends Model<toxicityScoresI> {
-  @BelongsTo((): typeof users => users)
-  public users: typeof users;
-
   @PrimaryKey
   @AutoIncrement
   @Column(DataType.INTEGER)
   public id: number;
 
-  @ForeignKey((): typeof users => users)
+  @ForeignKey(() => users)
   @Column(DataType.INTEGER)
   public userId: number;
+
+  @BelongsTo(() => users, { as: "user" })   // 👈 corrected association
+  public user: users;
 
   @Column(DataType.INTEGER)
   public roleId: number;
@@ -51,7 +51,7 @@ export class toxicityScores extends Model<toxicityScoresI> {
   @Column(DataType.TEXT)
   public summary: string;
 
-  @Column(DataType.TEXT('long'))
+  @Column(DataType.TEXT("long"))
   public analysis: string;
 
   @Column(DataType.INTEGER)
@@ -72,12 +72,12 @@ export class toxicityScores extends Model<toxicityScoresI> {
   @Column({
     type: DataType.VIRTUAL,
     get() {
-      const score = this.getDataValue('toxicityScore');
-      if (score >= 80) return 'Extremely High';
-      if (score >= 60) return 'High';
-      if (score >= 40) return 'Medium';
-      if (score >= 20) return 'Low';
-      return 'Very Low';
+      const score = this.getDataValue("toxicityScore");
+      if (score >= 80) return "Extremely High";
+      if (score >= 60) return "High";
+      if (score >= 40) return "Medium";
+      if (score >= 20) return "Low";
+      return "Very Low";
     },
   })
   public toxicityLevel: string;
@@ -85,11 +85,11 @@ export class toxicityScores extends Model<toxicityScoresI> {
   @Column({
     type: DataType.VIRTUAL,
     get() {
-      const score = this.getDataValue('toxicityScore');
-      if (score >= 70) return 'High Risk';
-      if (score >= 40) return 'Medium Risk';
-      if (score >= 20) return 'Low Risk';
-      return 'Safe';
+      const score = this.getDataValue("toxicityScore");
+      if (score >= 70) return "High Risk";
+      if (score >= 40) return "Medium Risk";
+      if (score >= 20) return "Low Risk";
+      return "Safe";
     },
   })
   public riskLevel: string;

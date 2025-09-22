@@ -13,7 +13,8 @@ import {
   notifications,
   userNotification,
   threadLog,
-  bannedKeywords
+  bannedKeywords,
+  postAuditTrail
 } from "@src/models";
 import { globalIo } from "..";
 import { Op, Sequelize, Transaction } from "sequelize";
@@ -1245,7 +1246,55 @@ export class ForumService {
 
 
 
+public async deleteOrHidePost(
+  id: number,
+  reason: string,
+  adminId: number,
+  action: "delete" | "hide"
+) {
+  // Find thread by primary key (id)
+  const thread = await threads.findByPk(id);
+  if (!thread) throw new Error("Post not found");
 
+  if (action === "delete") {
+    // Soft delete instead of hard delete
+    thread.deletedAt = new Date();
+    await thread.save();
+
+    // Log moderation action for delete
+    await postAuditTrail.create({
+      threadId: id,
+      adminId: adminId,
+      action: action,
+      reason: reason,
+      createdAt: new Date(),
+    });
+  } else if (action === "hide") {
+    thread.locked = true; // mark as hidden/locked
+    await thread.save();
+
+    // Log moderation action for hide
+    await postAuditTrail.create({
+      threadId: id,
+      adminId: adminId,
+      action: action,
+      reason: reason,
+      createdAt: new Date(),
+    });
+  }
+
+  // Notify thread owner (for both delete & hide)
+  await notifications.create({
+    userId: thread.ownerId,
+    content: `Your Post "${thread.title}" was ${action}d by an admin. Reason: ${reason}`,
+    StatusKey: 1, // unread/new
+    Status: "Unread",
+    seen: false,
+    typeId: 6, // e.g., 6 = Forum Report / moderation
+  });
+
+  return { success: true, message: `Post ${action}d successfully` };
+}
 
 
 

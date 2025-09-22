@@ -518,6 +518,24 @@ public getAllDiscussions = async (req: Request, res: Response) => {
   };
 
 
+public deleteOrHidePost = async (req: Request, res: Response) => {
+  try {
+    const { id, reason, action, adminId } = req.body;
+
+    if (!id || !reason || !action) {
+      return res
+        .status(400)
+        .json({ success: false, message: "id, reason, and action are required" });
+    }
+
+    const data = await this.__service.deleteOrHidePost(id, reason, adminId, action);
+
+    res.status(200).json({ success: true, data });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 
 
 }

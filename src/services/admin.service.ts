@@ -18,7 +18,8 @@ import {
   userLog,
   userNotification,
   users,
-  moderatorPermissions
+  moderatorPermissions,
+  toxicityScores
 } from "@src/models";
 import { sendPushNotification } from "@src/utils/pushNotification";
 import { getProcessedTemplate } from "@src/utils/renderEmailTemplate";
@@ -4211,147 +4212,89 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
   };
 
   public getReportedThread = async (data: any): Promise<any> => {
-    const { name } = data;
-    const res: any = await report.findAndCountAll({
-      attributes: ["id", "userId", "roleId", "problem", "messageDetail"],
-      order: [["createdAt", "DESC"]],
-      include: [
-        {
-          model: privateThreads,
-          as: "privateThreads",
-          where: name
-            ? {
-              title: {
-                [Op.like]: `%${name}%`,
-              },
-            }
-            : {},
-          attributes: ["id", "title"],
-          include: [
-            {
-              as: "users",
-              model: users,
-              attributes: ["id", "name", "roleId"],
-              include: [
-                {
-                  as: "roleData",
-                  model: roleData,
-                  attributes: [
-                    "companyName",
-                    "firstName",
-                    "lastName",
-                    "profile",
-                    "id",
-                  ],
-                },
-              ],
-            },
-            {
-              as: "toUsers",
-              model: users,
-              attributes: ["id", "name", "roleId"],
-              include: [
-                {
-                  as: "roleData",
-                  model: roleData,
-                  attributes: [
-                    "companyName",
-                    "firstName",
-                    "lastName",
-                    "profile",
-                    "id",
-                  ],
-                },
-              ],
-            },
-            {
-              as: "employee",
-              model: employee,
-              attributes: [
-                "id",
-                "firstName",
-                "lastName",
-                [Sequelize.literal("3"), "roleId"],
-                "profile",
-              ],
-              include: [
-                {
-                  as: "users",
-                  model: users,
-                  attributes: ["id"],
-                  include: [
-                    {
-                      as: "roleData",
-                      model: roleData,
-                      attributes: ["companyName", "id", "profile"],
-                    },
-                  ],
-                },
-              ],
-            },
-            {
-              as: "toEmployee",
-              model: employee,
-              attributes: [
-                "id",
-                "firstName",
-                "lastName",
-                [Sequelize.literal("3"), "roleId"],
-                "profile",
-              ],
-              include: [
-                {
-                  as: "users",
-                  model: users,
-                  attributes: ["id"],
-                  include: [
-                    {
-                      as: "roleData",
-                      model: roleData,
-                      attributes: ["companyName", "id", "profile"],
-                    },
-                  ],
-                },
-              ],
-            },
-            {
-              as: "privateMessages",
-              model: privateMessages,
-              attributes: ["message", "createdAt", "img"],
-              limit: 2,
-              order: [["createdAt", "desc"]],
-            },
-          ],
-        },
-      ],
-    });
+  const { name } = data;
 
-    const modifiedResult = await Promise.all(
-      res.rows.map(async (item: any) => {
-        let userDetail = null;
-
-        if (item.roleId == 1 || item.roleId == 2) {
-          userDetail = await users.findOne({
-            where: { id: item.userId },
-            attributes: ["id", "roleId", "name"],
+  const res: any = await report.findAndCountAll({
+    attributes: [
+      "id",
+      "userId",
+      "roleId",
+      "problem",
+      "messageDetail",
+      "createdAt",
+      "reportedUserId",
+      "reportedRoleId",
+    ],
+    order: [["createdAt", "DESC"]],
+    include: [
+      {
+        model: privateThreads,
+        as: "privateThreads",
+        where: name
+          ? { title: { [Op.like]: `%${name}%` } }
+          : {},
+        attributes: ["id", "title"],
+        include: [
+          {
+            as: "users",
+            model: users,
+            attributes: ["id", "name", "roleId", "email", "phone"],
             include: [
               {
-                model: roleData,
                 as: "roleData",
+                model: roleData,
                 attributes: [
-                  "id",
+                  "companyName",
                   "firstName",
                   "lastName",
-                  "companyName",
                   "profile",
+                  "id",
                 ],
               },
+              {
+                model: toxicityScores,
+                as: "toxicityScores",
+                attributes: ["toxicityScore", "summary", "analysis"],
+                required: false, // only include if exists
+              },
             ],
-          });
-        } else {
-          userDetail = await employee.findOne({
-            where: { id: item.userId },
-            attributes: ["id", "firstName", "lastName", "profile"],
+          },
+          {
+            as: "toUsers",
+            model: users,
+            attributes: ["id", "name", "roleId", "email", "phone"],
+            include: [
+              {
+                as: "roleData",
+                model: roleData,
+                attributes: [
+                  "companyName",
+                  "firstName",
+                  "lastName",
+                  "profile",
+                  "id",
+                ],
+              },
+              {
+                model: toxicityScores,
+                as: "toxicityScores",
+                attributes: ["toxicityScore", "summary", "analysis"],
+                required: false,
+              },
+            ],
+          },
+          {
+            as: "employee",
+            model: employee,
+            attributes: [
+              "id",
+              "firstName",
+              "lastName",
+              [Sequelize.literal("3"), "roleId"],
+              "profile",
+              "email",
+              "phone",
+            ],
             include: [
               {
                 as: "users",
@@ -4359,32 +4302,140 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
                 attributes: ["id", "roleId", "name"],
                 include: [
                   {
-                    model: roleData,
                     as: "roleData",
-                    attributes: [
-                      "id",
-                      "firstName",
-                      "lastName",
-                      "companyName",
-                      "profile",
-                    ],
+                    model: roleData,
+                    attributes: ["companyName", "id", "profile"],
+                  },
+                  {
+                    model: toxicityScores,
+                    as: "toxicityScores",
+                    attributes: ["toxicityScore", "summary", "analysis"],
+                    required: false,
                   },
                 ],
               },
             ],
-          });
-        }
-        return {
-          ...item.toJSON(),
-          userDetail,
-        };
-      })
-    );
-    return {
-      count: res.count,
-      rows: modifiedResult,
-    };
+          },
+          {
+            as: "toEmployee",
+            model: employee,
+            attributes: [
+              "id",
+              "firstName",
+              "lastName",
+              [Sequelize.literal("3"), "roleId"],
+              "profile",
+              "email",
+              "phone",
+            ],
+            include: [
+              {
+                as: "users",
+                model: users,
+                attributes: ["id"],
+                include: [
+                  {
+                    as: "roleData",
+                    model: roleData,
+                    attributes: ["companyName", "id", "profile"],
+                  },
+                  {
+                    model: toxicityScores,
+                    as: "toxicityScores",
+                    attributes: ["toxicityScore", "summary", "analysis"],
+                    required: false,
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            as: "privateMessages",
+            model: privateMessages,
+            attributes: ["message", "createdAt", "img"],
+            limit: 2,
+            order: [["createdAt", "desc"]],
+          },
+        ],
+      },
+    ],
+  });
+
+  const modifiedResult = await Promise.all(
+    res.rows.map(async (item: any) => {
+      let userDetail = null;
+
+      if (item.roleId == 1 || item.roleId == 2) {
+        userDetail = await users.findOne({
+          where: { id: item.userId },
+          attributes: ["id", "roleId", "name", "email", "phone"],
+          include: [
+            {
+              model: roleData,
+              as: "roleData",
+              attributes: [
+                "id",
+                "firstName",
+                "lastName",
+                "companyName",
+                "profile",
+              ],
+            },
+            {
+              model: toxicityScores,
+              as: "toxicityScores",
+              attributes: ["toxicityScore", "summary", "analysis"],
+              required: false,
+            },
+          ],
+        });
+      } else {
+        userDetail = await employee.findOne({
+          where: { id: item.userId },
+          attributes: ["id", "firstName", "lastName", "profile", "email", "phone"],
+          include: [
+            {
+              as: "users",
+              model: users,
+              attributes: ["id", "roleId", "name"],
+              include: [
+                {
+                  model: roleData,
+                  as: "roleData",
+                  attributes: [
+                    "id",
+                    "firstName",
+                    "lastName",
+                    "companyName",
+                    "profile",
+                  ],
+                },
+                {
+                  model: toxicityScores,
+                  as: "toxicityScores",
+                  attributes: ["toxicityScore", "summary", "analysis"],
+                  required: false,
+                },
+              ],
+            },
+          ],
+        });
+      }
+
+      return {
+        ...item.toJSON(),
+        userDetail,
+      };
+    })
+  );
+
+  return {
+    count: res.count,
+    rows: modifiedResult,
   };
+};
+
+
 
   public solvePrivateReport = async (
     data: any,
