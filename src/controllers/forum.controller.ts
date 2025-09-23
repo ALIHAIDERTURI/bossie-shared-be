@@ -538,4 +538,41 @@ public deleteOrHidePost = async (req: Request, res: Response) => {
 
 
 
+
+
+
+
+
+public hideMessage = async (req: Request, res: Response) => {
+  try {
+    const { messageId } = req.params;
+    const { adminId } = req.body; // pass adminId in request body
+
+    const result = await this.__service.hideMessage(
+      Number(messageId),
+      Number(adminId)
+    );
+
+    return res.json(result);
+  } catch (error: any) {
+    console.error("Error hiding message:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+public unhideMessage = async (req: Request, res: Response) => {
+  try {
+    const { messageId } = req.params;
+
+    const result = await this.__service.unhideMessage(Number(messageId));
+
+    return res.json(result);
+  } catch (error: any) {
+    console.error("Error unhiding message:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+
+
 }

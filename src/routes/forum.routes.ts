@@ -3,6 +3,7 @@ import { forumController } from "../controllers";
 import { createReportValidator } from "@src/shared/common/validators/forum.validator";
 import { addAdminCommentValidator } from "@src/shared/common/validators/forum.validator";
 
+
 export const forumRouter: Router = Router();
 
 forumRouter.post("/createCategory", (...args: [Request, Response]) =>
@@ -108,3 +109,9 @@ forumRouter.get("/filterThreads", (req, res) => forumController.getFilteredThrea
 
 // Delete / Hide Post
 forumRouter.post("/forum/post/moderate", (req, res) => forumController.deleteOrHidePost(req, res));
+
+
+
+
+forumRouter.put("/messages/:messageId/hide", (req, res) => forumController.hideMessage(req, res));
+forumRouter.put("/messages/:messageId/unhide", (req, res) => forumController.unhideMessage(req, res));

@@ -19,6 +19,7 @@ import {
 import { globalIo } from "..";
 import { Op, Sequelize, Transaction } from "sequelize";
 import { sequelize } from "@src/config/database";
+
 const io = require("socket.io");
 
 export class ForumService {
@@ -959,9 +960,16 @@ export class ForumService {
         };
       }
 
+      if (msg.isHidden) {
+      return {
+      ...msg.toJSON(),
+      message: "⚠️ This message has been hidden by a moderator.",
+      };
+}
+
       return msg;
     });
-
+    
     return filtered;
   }
 
@@ -1295,6 +1303,46 @@ public async deleteOrHidePost(
 
   return { success: true, message: `Post ${action}d successfully` };
 }
+
+
+
+
+
+  public async hideMessage(messageId: number, adminId: number) {
+    const msg = await messages.findByPk(messageId);
+
+    if (!msg) {
+      throw new Error("Message not found");
+    }
+
+    await msg.update({ isHidden: true, hiddenBy: adminId });
+
+    return {
+      success: true,
+      message: "Message hidden successfully",
+      data: {
+        id: msg.id,
+        isHidden: msg.isHidden,
+        hiddenBy: msg.hiddenBy,
+      },
+    };
+  }
+
+  public async unhideMessage(messageId: number) {
+    const msg = await messages.findByPk(messageId);
+
+    if (!msg) {
+      throw new Error("Message not found");
+    }
+
+    await msg.update({ isHidden: false, hiddenBy: null });
+
+    return {
+      success: true,
+      message: "Message unhidden successfully",
+    };
+  }
+
 
 
 
