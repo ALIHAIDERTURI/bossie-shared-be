@@ -530,265 +530,205 @@ export class UserService {
   };
 
   public loginUser = async (data: any): Promise<any> => {
-    const { email, password, fcmToken } = data;
+  const { email, password, fcmToken } = data;
 
-    const userData: any = await users.findOne({ where: { email } });
-    if (!userData) {
-      const employeeData = await employee.findOne({ where: { email }, raw: true });
-      if (!employeeData) {
-        throw new Error("Gebruiker bestaat niet.");
-      }
-      const checkPassword = bcrypt.compareSync(password, employeeData.password);
-      if (!checkPassword) {
-        throw new Error(
-          "Er is iets misgegaan. Controleer uw e-mailadres en wachtwoord."
-        );
-      }
-
-      const companyData = await users.findOne({ where: { id: employeeData.userId }, raw: true })
-      if (companyData?.profileStatus !== 3) {
-        throw new Error("U kunt momenteel niet inloggen. Neem contact op met uw beheerder.")
-      }
-
-      const secret = process.env.SECRET_KEY as string;
-
-      let token = jwt.sign(
-        {
-          id: employeeData.id,
-          roleId: 3,
-          isAdmin: false
-        },
-        secret,
-        { expiresIn: "1D" }
-      );
-
-      await employee.update(
-        { firstTimeLogin: false, fcmToken: fcmToken },
-        {
-          where: {
-            id: employeeData.id,
-          },
-        }
-      );
-
-      // Update lastLogin for the company user
-      await users.update(
-        { lastLogin: new Date() },
-        {
-          where: {
-            id: employeeData.userId,
-          },
-        }
-      );
-
-      const compData: any = await roleData.findOne({ where: { userId: employeeData.userId }, attributes: ["companyName"], raw: true })
-
-      const response = {
-        id: employeeData.id,
-        name: employeeData.firstName + " " + employeeData.lastName,
-        firstName: employeeData.firstName,
-        lastName: employeeData.lastName,
-        email: employeeData.email,
-        profile: employeeData.profile,
-        phone: employeeData.phone,
-        currentSituationId: employeeData.currentSituationId,
-        currentSituationName: employeeData.currentSituationName,
-        token: token,
-        isApproved: employeeData.isApproved,
-        status: employeeData.profileStatus,
-        fcmToken: employeeData.fcmToken,
-        firstTimeLogin: employeeData.firstTimeLogin,
-        roleId: 3,
-        roleData: {
-          mutedOn: employeeData.mutedOn,
-          suspendedOn: employeeData.suspendedOn,
-          suspendedDays: employeeData.suspendedDays,
-          suspendReason: employeeData.suspendReason,
-          muteReason: employeeData.muteReason,
-          mutedDays: employeeData.mutedDays,
-          accountStatus: employeeData.accountStatus,
-        },
-        companyData: {
-          id: employeeData.userId,
-          companyName: compData.companyName,
-          roleId: 2
-        }
-      };
-
-      return response;
+  const userData: any = await users.findOne({ where: { email } });
+  if (!userData) {
+    // Employee flow
+    const employeeData: any = await employee.findOne({ where: { email }, raw: true });
+    if (!employeeData) {
+      throw new Error("Gebruiker bestaat niet.");
     }
-    const checkPassword = bcrypt.compareSync(password, userData.password);
 
+    const checkPassword = bcrypt.compareSync(password, employeeData.password);
     if (!checkPassword) {
-      throw new Error(
-        "Er is iets misgegaan. Controleer uw e-mailadres en wachtwoord."
-      );
+      throw new Error("Er is iets misgegaan. Controleer uw e-mailadres en wachtwoord.");
     }
 
-    if (!userData.emailVerified) {
-      const OTP = generateOTP();
-      const emailHtml = getProcessedTemplate("login_otp", { username: userData.name, otp: OTP });
-      console.log("emailHtml", emailHtml);
-
-      const isEmailSend: any = await sendEmail({
-        from: String(process.env.EMAIL),
-        to: email,
-        subject: "Welkom bij de Bossie-app! Verifieer uw e-mailadres.",
-        html: emailHtml, // Use processed HTML
-      });
-
-      if (!isEmailSend) {
-        throw new Error("Fout bij het verzenden van e-mail.");
-      }
-      const usersObj: any = {
-        OTP: OTP,
-        isOtpUsed: false,
-        otpCreatedAt: new Date(),
-        updatedAt: new Date(),
-      };
-
-      const userResponse: any = await users.update(
-        { ...usersObj },
-        {
-          where: {
-            id: userData.id,
-          },
-        }
-      );
-
-      const response: any = {
-        id: userData?.id,
-        roleId: userData?.roleId,
-      };
-
-      throw {
-        message: "Email has been sent to your account, Please verify!",
-        response: { id: userData?.id, roleId: userData?.roleId },
-      };
-      return;
+    const companyData: any = await users.findOne({ where: { id: employeeData.userId }, raw: true });
+    if (companyData?.profileStatus !== 3) {
+      throw new Error("U kunt momenteel niet inloggen. Neem contact op met uw beheerder.");
     }
 
     const secret = process.env.SECRET_KEY as string;
-
-    let token = jwt.sign(
+    const token = jwt.sign(
       {
-        id: userData.id,
-        roleId: userData.roleId,
+        id: employeeData.id,
+        roleId: 3,
         isAdmin: false,
       },
       secret,
       { expiresIn: "1D" }
     );
-    let attributeData: any;
 
-    switch (userData.roleId) {
-      case 1:
-        attributeData = [
-          "id",
-          "profile",
-          "industryId",
-          "about",
-          "firstName",
-          "lastName",
-          "title",
-          "address",
-          "hourlyRate",
-          "isApproved",
-          "accountStatus",
-          "isVideoSubmitted",
-        ];
-        break;
-      case 2:
-        attributeData = [
-          "id",
-          "profile",
-          "companyName",
-          "city",
-          "postalCode",
-          "industryId",
-          "about",
-          "isApproved",
-          "accountStatus",
-          "isVideoSubmitted",
-        ];
-        break;
-    }
+    await employee.update(
+      { firstTimeLogin: false, fcmToken: fcmToken },
+      { where: { id: employeeData.id } }
+    );
 
-    let roleInfo: any = await roleData.findOne({
-      where: { userId: userData.id },
-      // attributes: attributeData,
+    // Update lastLogin for the company user
+    await users.update(
+      { lastLogin: new Date() },
+      { where: { id: employeeData.userId } }
+    );
+
+    const compData: any = await roleData.findOne({
+      where: { userId: employeeData.userId },
+      attributes: ["companyName"],
+      raw: true,
     });
 
-    await users.update(
-      { firstTimeLogin: false, fcmToken: fcmToken, lastLogin: new Date() },
-      {
-        where: {
-          id: userData.id,
-        },
-      }
-    );
-    let employeeCount: any = 0;
-    if (userData.roleId == 2) {
-      employeeCount = await employee.count({ where: { userId: userData.id } });
-    }
+    // compute suspendUntil & muteUntil for employee
+    const suspendUntilEmp = employeeData.suspendedOn && employeeData.suspendedDays
+      ? new Date(new Date(employeeData.suspendedOn).getTime() + employeeData.suspendedDays * 24 * 60 * 60 * 1000)
+      : null;
 
-    // const response = {
-    //   id: userData?.id,
-    //   name: userData?.name,
-    //   email: userData?.email,
-    //   emailVerified: userData?.emailVerified,
-    //   roleId: userData?.roleId,
-    //   token: token,
-    //   isProfileSubmitted: roleInfo ? 1 : 0,
-    //   isVideoSubmitted: roleInfo?.isVideoSubmitted,
-    //   profileId: roleInfo?.id,
-    //   profile: roleInfo?.profile,
-    //   profileName: roleInfo?.companyName
-    //     ? roleInfo?.companyName
-    //     : `${roleInfo?.firstName} ${roleInfo?.lastName}`,
-    //   firstTimeLogin: userData?.firstTimeLogin,
-    //   isApproved: roleInfo?.isApproved ? roleInfo?.isApproved : 0,
-    //   isRejected: roleInfo?.isRejected ? roleInfo?.isRejected : 0,
-    //   rejectionReason: roleInfo?.rejectionReason,
-    //   employeeCount: employeeCount,
-    // };
-
-    if (roleInfo) {
-      const cleanedRoleData = { ...roleInfo.dataValues }; // Assuming dataValues holds the roleData properties
-      Object.keys(cleanedRoleData).forEach((key) => {
-        if (cleanedRoleData[key] === null) {
-          delete cleanedRoleData[key];
-        }
-      });
-      roleInfo = cleanedRoleData;
-    }
+    const muteUntilEmp = employeeData.mutedOn && employeeData.mutedDays
+      ? new Date(new Date(employeeData.mutedOn).getTime() + employeeData.mutedDays * 24 * 60 * 60 * 1000)
+      : null;
 
     const response = {
-      id: userData?.id,
-      name: userData?.name,
-      email: userData?.email,
-      emailVerified: userData?.emailVerified,
-      roleId: userData?.roleId,
-      phone: userData?.phone,
+      id: employeeData.id,
+      name: `${employeeData.firstName} ${employeeData.lastName}`,
+      firstName: employeeData.firstName,
+      lastName: employeeData.lastName,
+      email: employeeData.email,
+      profile: employeeData.profile,
+      phone: employeeData.phone,
+      currentSituationId: employeeData.currentSituationId,
+      currentSituationName: employeeData.currentSituationName,
       token: token,
-      status: userData?.profileStatus,
-      // isProfileSubmitted: roleInfo ? 1 : 0,
-      // isVideoSubmitted: roleInfo?.isVideoSubmitted,
-      // profileId: roleInfo?.id,
-      // profile: roleInfo?.profile,
-      // profileName: roleInfo?.companyName
-      //   ? roleInfo?.companyName
-      //   : `${roleInfo?.firstName} ${roleInfo?.lastName}`,
-      firstTimeLogin: userData?.firstTimeLogin,
-      roleData: roleInfo,
-      // isApproved: roleInfo?.isApproved ? roleInfo?.isApproved : 0,
-      // isRejected: roleInfo?.isRejected ? roleInfo?.isRejected : 0,
-      rejectionReason: userData?.rejectionReason,
-      employeeCount: employeeCount,
+      isApproved: employeeData.isApproved,
+      status: employeeData.profileStatus,
+      fcmToken: employeeData.fcmToken,
+      firstTimeLogin: employeeData.firstTimeLogin,
+      roleId: 3,
+      roleData: {
+        mutedOn: employeeData.mutedOn || null,
+        suspendedOn: employeeData.suspendedOn || null,
+        suspendedDays: employeeData.suspendedDays ?? null,
+        suspendReason: employeeData.suspendReason || null,
+        muteReason: employeeData.muteReason || null,
+        mutedDays: employeeData.mutedDays ?? null,
+        accountStatus: employeeData.accountStatus ?? null,
+        suspendUntil: suspendUntilEmp,
+        muteUntil: muteUntilEmp,
+      },
+      companyData: {
+        id: employeeData.userId,
+        companyName: compData?.companyName || null,
+        roleId: 2,
+      },
     };
 
     return response;
+  }
+
+  // Normal user flow
+  const checkPassword = bcrypt.compareSync(password, userData.password);
+  if (!checkPassword) {
+    throw new Error("Er is iets misgegaan. Controleer uw e-mailadres en wachtwoord.");
+  }
+
+  if (!userData.emailVerified) {
+    const OTP = generateOTP();
+    const emailHtml = getProcessedTemplate("login_otp", { username: userData.name, otp: OTP });
+
+    const isEmailSend: any = await sendEmail({
+      from: String(process.env.EMAIL),
+      to: email,
+      subject: "Welkom bij de Bossie-app! Verifieer uw e-mailadres.",
+      html: emailHtml,
+    });
+
+    if (!isEmailSend) {
+      throw new Error("Fout bij het verzenden van e-mail.");
+    }
+
+    const usersObj: any = {
+      OTP: OTP,
+      isOtpUsed: false,
+      otpCreatedAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    await users.update(
+      { ...usersObj },
+      { where: { id: userData.id } }
+    );
+
+    throw {
+      message: "Email has been sent to your account, Please verify!",
+      response: { id: userData?.id, roleId: userData?.roleId },
+    };
+  }
+
+  const secret = process.env.SECRET_KEY as string;
+  const token = jwt.sign(
+    {
+      id: userData.id,
+      roleId: userData.roleId,
+      isAdmin: false,
+    },
+    secret,
+    { expiresIn: "1D" }
+  );
+
+  let roleInfo: any = await roleData.findOne({ where: { userId: userData.id } });
+
+  // update user meta
+  await users.update(
+    { firstTimeLogin: false, fcmToken: fcmToken, lastLogin: new Date() },
+    { where: { id: userData.id } }
+  );
+
+  let employeeCount: any = 0;
+  if (userData.roleId == 2) {
+    employeeCount = await employee.count({ where: { userId: userData.id } });
+  }
+
+  let cleanedRoleData: any = null;
+  if (roleInfo) {
+    // handle both raw and model instances
+    const rd = roleInfo.dataValues ? { ...roleInfo.dataValues } : { ...roleInfo };
+
+    // remove null values
+    Object.keys(rd).forEach((key) => {
+      if (rd[key] === null) delete rd[key];
+    });
+
+    // calculate suspendUntil & muteUntil
+    rd.suspendUntil = rd.suspendedOn && rd.suspendedDays
+      ? new Date(new Date(rd.suspendedOn).getTime() + rd.suspendedDays * 24 * 60 * 60 * 1000)
+      : null;
+
+    rd.muteUntil = rd.mutedOn && rd.mutedDays
+      ? new Date(new Date(rd.mutedOn).getTime() + rd.mutedDays * 24 * 60 * 60 * 1000)
+      : null;
+
+    cleanedRoleData = rd;
+  }
+
+  const response = {
+    id: userData?.id,
+    name: userData?.name,
+    email: userData?.email,
+    emailVerified: userData?.emailVerified,
+    roleId: userData?.roleId,
+    phone: userData?.phone,
+    token: token,
+    status: userData?.profileStatus,
+    firstTimeLogin: userData?.firstTimeLogin,
+    roleData: cleanedRoleData,
+    rejectionReason: userData?.rejectionReason,
+    employeeCount: employeeCount,
   };
+
+  return response;
+};
+
+
+
 
   public createProfile = async (
     data: any,
