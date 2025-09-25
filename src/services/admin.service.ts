@@ -4583,26 +4583,148 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
   };
 
   public getThreadLogInfo = async (data: any): Promise<any> => {
-    const { id } = data;
-    return await threadLog.findAll({
-      where: {
-        threadId: id,
-      },
-      attributes: { exclude: ["UpdatedAt", "deletedAt"] },
-      include: [
-        {
-          as: "locked",
-          model: admin,
-          attributes: ["id", "adminRoleId", "name"],
-        },
-        {
-          as: "edited",
-          model: admin,
-          attributes: ["id", "adminRoleId", "name"],
-        },
-      ],
-    });
-  };
+  const { id } = data;
+
+  // 1) fetch raw logs from threadLog (no includes)
+  const logs: any[] = await threadLog.findAll({
+    where: { threadId: id },
+    attributes: {
+      exclude: ["updatedAt", "deletedAt"]
+    },
+    raw: true, // return plain objects
+    order: [["createdAt", "DESC"]],
+  });
+
+  if (!logs || logs.length === 0) return [];
+
+  // 2) collect all admin ids referenced in logs (lockedBy, unLockedBy, editedBy, hiddenBy, pinnedBy)
+  const adminIdSet = new Set<number>();
+  for (const l of logs) {
+    if (l.lockedBy) adminIdSet.add(l.lockedBy);
+    if (l.unLockedBy) adminIdSet.add(l.unLockedBy);
+    if (l.editedBy) adminIdSet.add(l.editedBy);
+    if (l.hiddenBy) adminIdSet.add(l.hiddenBy);
+    if (l.pinnedBy) adminIdSet.add(l.pinnedBy);
+  }
+  const adminIds = Array.from(adminIdSet);
+  // 3) fetch admin rows in one query
+  const admins = adminIds.length
+    ? await admin.findAll({
+        where: { id: adminIds },
+        attributes: ["id", "adminRoleId", "name"],
+        raw: true,
+      })
+    : [];
+
+  // 4) map admin id -> admin object
+  const adminById = new Map<number, any>();
+  for (const a of admins) adminById.set(a.id, a);
+
+  // 5) transform logs into the desired output
+  const result = logs.map((log: any) => {
+    let action = "Unknown action";
+    let actor: any = null;
+
+    // Edited
+    if (log.isEdited) {
+      action = "Thread edited by admin";
+      if (log.editedBy && adminById.has(log.editedBy)) {
+        const ad = adminById.get(log.editedBy);
+        actor = { id: ad.id, roleId: ad.adminRoleId, name: ad.name, source: "admin" };
+      } else {
+        actor = { source: "system" };
+      }
+    }
+
+    // Locked cases
+    else if (log.isLocked === 1) {
+      if (log.lockedBy) {
+        action = "Thread locked by admin";
+        const ad = adminById.get(log.lockedBy);
+        actor = ad ? { id: ad.id, roleId: ad.adminRoleId, name: ad.name, source: "admin" } : { source: "admin" };
+      } else {
+        action = "Thread locked by user";
+        actor = { source: "user" };
+      }
+    }
+
+    // Unlocked cases
+    else if (log.isLocked === 0 && (log.unLockedBy !== undefined || log.unLockedBy !== null)) {
+      if (log.unLockedBy) {
+        action = "Thread unlocked by admin";
+        const ad = adminById.get(log.unLockedBy);
+        actor = ad ? { id: ad.id, roleId: ad.adminRoleId, name: ad.name, source: "admin" } : { source: "admin" };
+      } else {
+        action = "Thread unlocked by user";
+        actor = { source: "user" };
+      }
+    }
+
+    // Hidden / Unhidden (requires threadLog columns isHidden/hiddenBy to exist)
+    else if (log.isHidden === 1) {
+      if (log.hiddenBy) {
+        action = "Thread hidden by admin";
+        const ad = adminById.get(log.hiddenBy);
+        actor = ad ? { id: ad.id, roleId: ad.adminRoleId, name: ad.name, source: "admin" } : { source: "admin" };
+      } else {
+        action = "Thread hidden by user";
+        actor = { source: "user" };
+      }
+    } else if (log.isHidden === 0 && log.hiddenBy !== undefined) {
+      // if explicit unhide logged
+      if (log.hiddenBy) {
+        action = "Thread unhidden by admin";
+        const ad = adminById.get(log.hiddenBy);
+        actor = ad ? { id: ad.id, roleId: ad.adminRoleId, name: ad.name, source: "admin" } : { source: "admin" };
+      } else {
+        action = "Thread unhidden by user";
+        actor = { source: "user" };
+      }
+    }
+
+    // Pinned / Unpinned (requires threadLog columns isPinned/pinnedBy to exist)
+    else if (log.isPinned === 1) {
+      if (log.pinnedBy) {
+        action = "Thread pinned by admin";
+        const ad = adminById.get(log.pinnedBy);
+        actor = ad ? { id: ad.id, roleId: ad.adminRoleId, name: ad.name, source: "admin" } : { source: "admin" };
+      } else {
+        action = "Thread pinned by user";
+        actor = { source: "user" };
+      }
+    } else if (log.isPinned === 0 && log.pinnedBy !== undefined) {
+      if (log.pinnedBy) {
+        action = "Thread unpinned by admin";
+        const ad = adminById.get(log.pinnedBy);
+        actor = ad ? { id: ad.id, roleId: ad.adminRoleId, name: ad.name, source: "admin" } : { source: "admin" };
+      } else {
+        action = "Thread unpinned by user";
+        actor = { source: "user" };
+      }
+    }
+
+    // fallback actor if still null
+    if (!actor) actor = { source: "system" };
+
+    return {
+      id: log.id,
+      threadId: log.threadId,
+      action,
+      actor,
+      timestamp: log.createdAt,
+    };
+  });
+
+  return result;
+};
+
+
+
+
+
+
+
+
 
   public updateAdminPassword = async (data: any): Promise<any> => {
     const { id, currentPass, newPass, confirmPass } = data;
