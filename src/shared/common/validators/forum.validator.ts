@@ -159,14 +159,16 @@ export const createReportValidator = Joi.object({
 export const getAllDiscussionsValidator = Joi.object({}).optional();
 
 export const editThreadValidator = Joi.object({
-  threadId: Joi.number().required(),
-  title: Joi.string().min(3).max(255).required(),
-  description: Joi.string().min(5).max(5000).required(),
-  categoryId: Joi.number().required(),
-  subCategoryId: Joi.number().required(),
-  locked: Joi.boolean().required(),
-  reason: Joi.string().min(5).max(255).required()
+  threadId: Joi.number().required(), // must have this to identify the thread
+  title: Joi.string().min(3).max(255).optional(),
+  description: Joi.string().min(5).max(5000).optional(),
+  categoryId: Joi.number().optional(),
+  subCategoryId: Joi.number().optional(),
+  locked: Joi.boolean().optional(),
+  reason: Joi.string().min(5).max(255).optional(),
+  logo: Joi.string().min(3).max(255).optional()
 });
+
 
 
 export const addAdminCommentValidator = Joi.object({
