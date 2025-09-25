@@ -508,14 +508,15 @@ public getAllDiscussions = async (req: Request, res: Response) => {
 
 
 
-  public getFilteredThreads = async (req: Request, res: Response) => {
-    try {
-      const data = await this.__service.getFilteredThreads(req.query);
-      res.status(200).json({ success: true, data });
-    } catch (error: any) {
-      res.status(500).json({ success: false, message: error.message });
-    }
-  };
+  public fetchThreads = async (req: Request, res: Response) => {
+  try {
+    const data = await this.__service.fetchThreads(req.query);
+    res.status(200).json({ success: true, data });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 
 
 public deleteOrHidePost = async (req: Request, res: Response) => {

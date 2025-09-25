@@ -181,7 +181,8 @@ export const addAdminCommentValidator = Joi.object({
 
 
 
-export const getFilteredThreadsSchema = Joi.object({
+export const fetchThreadsSchema = Joi.object({
+  subCategoryId: Joi.number().integer().required(),
   limit: Joi.number().integer().min(1).max(100).default(10),
   offset: Joi.number().integer().min(0).default(0),
   filters: Joi.object({
@@ -189,13 +190,13 @@ export const getFilteredThreadsSchema = Joi.object({
     title: Joi.string().optional(),
     status: Joi.string().valid("open", "closed").optional(),
     flags: Joi.object({
-      suggested: Joi.boolean().optional(),
       pinned: Joi.boolean().optional(),
     }).optional(),
     dateFrom: Joi.date().optional(),
     dateTo: Joi.date().optional(),
-  }).optional()
-}).optional();
+  }).optional(),
+});
+
 
 
 export const updateThreadStatusSchema = Joi.object({

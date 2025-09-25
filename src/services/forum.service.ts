@@ -1181,77 +1181,167 @@ export class ForumService {
 
 
 // Search and Filter
+ 
 
 
 
-  
-  public async getFilteredThreads(query: any) {
-    const { limit = 10, offset = 0, filters = {} } = query;
-    const { user, title, status, flags, dateFrom, dateTo } = filters;
+
+
+  public async fetchThreads(query: any) {
+    const { limit = 10, offset = 0, filters = {}, subCategoryId } = query;
+    const { user, title, status, flags, dateFrom, dateTo } = filters || {};
 
     const whereClause: any = {};
 
-    // Filter by thread title
-    if (title) {
-      whereClause.title = { [Op.like]: `%${title}%` };
+    // SubCategory filter
+    if (subCategoryId) {
+      whereClause.subCategoryId = subCategoryId;
     }
 
-    // Filter by status (locked = closed)
+    // Title OR Description filter
+    if (title) {
+      whereClause[Op.or] = [
+        { title: { [Op.like]: `%${title}%` } },
+        { description: { [Op.like]: `%${title}%` } },
+      ];
+    }
+
+    // Status filter (locked = closed)
     if (status === "open") whereClause.locked = false;
     if (status === "closed") whereClause.locked = true;
 
-    // Filter by date range
+    // Date range
     if (dateFrom || dateTo) {
       whereClause.createdAt = {};
       if (dateFrom) whereClause.createdAt[Op.gte] = new Date(dateFrom);
       if (dateTo) whereClause.createdAt[Op.lte] = new Date(dateTo);
     }
 
-    // Include flags: suggested / pinned (assuming columns exist)
-    if (flags) {
-      if (typeof flags.suggested !== "undefined") whereClause["suggested"] = flags.suggested;
-      if (typeof flags.pinned !== "undefined") whereClause["pinned"] = flags.pinned;
+    // Flags (pinned only)
+    if (flags && typeof flags.pinned !== "undefined") {
+      whereClause.pinned = flags.pinned;
     }
 
-    // Search by user name
+    // Include clause: users -> roleData, and employee
     const includeClause: any[] = [
       {
         model: users,
-        attributes: ["id", "name"],
-        where: user ? { name: { [Op.like]: `%${user}%` } } : undefined,
+        attributes: ["id", "name", "roleId"],
+        include: [
+          {
+            model: roleData,
+            attributes: ["firstName", "lastName"],
+          },
+        ],
+        where: user
+          ? {
+              [Op.or]: [
+                { name: { [Op.like]: `%${user}%` } },
+                Sequelize.where(
+                  Sequelize.fn(
+                    "concat",
+                    Sequelize.col("users->roleData.firstName"),
+                    " ",
+                    Sequelize.col("users->roleData.lastName")
+                  ),
+                  { [Op.like]: `%${user}%` }
+                ),
+              ],
+            }
+          : undefined,
+        required: false,
       },
       {
         model: employee,
-        attributes: ["id", "firstName", "lastName"],
+        attributes: ["id", "firstName", "lastName", "roleId"],
         where: user
-          ? Sequelize.where(
-              Sequelize.fn("concat", Sequelize.col("firstName"), " ", Sequelize.col("lastName")),
-              {
-                [Op.like]: `%${user}%`,
-              }
-            )
+          ? {
+              [Op.or]: [
+                { firstName: { [Op.like]: `%${user}%` } },
+                { lastName: { [Op.like]: `%${user}%` } },
+              ],
+            }
           : undefined,
+        required: false,
       },
     ];
 
     const { count, rows } = await threads.findAndCountAll({
       where: whereClause,
       include: includeClause,
+      attributes: {
+        exclude: ["suggested", "hidden"],
+      },
       limit,
       offset,
       order: [["createdAt", "desc"]],
+    });
+
+    const data = rows.map((r: any) => {
+      const plain = r.get ? r.get({ plain: true }) : r;
+
+      // cleanup
+      if ("suggested" in plain) delete plain.suggested;
+      if ("hidden" in plain) delete plain.hidden;
+
+      // normalize users
+      if (plain.user) {
+        const u = plain.user;
+        plain.users = {
+          id: u.id,
+          name: u.name,
+          roleId: u.roleId ?? null,
+          roleData: {
+            roleId: u.roleId ?? null,
+            firstName: u.roleData?.firstName ?? null,
+            lastName: u.roleData?.lastName ?? null,
+          },
+        };
+        delete plain.user;
+      } else if (plain.users) {
+        const u = plain.users;
+        plain.users = {
+          id: u.id,
+          name: u.name,
+          roleId: u.roleId ?? null,
+          roleData: {
+            roleId: u.roleId ?? null,
+            firstName: u.roleData?.firstName ?? null,
+            lastName: u.roleData?.lastName ?? null,
+          },
+        };
+      }
+
+      // 🔥 Add createdBy field
+      if (plain.employee) {
+        plain.createdBy = {
+          id: plain.employee.id,
+          firstName: plain.employee.firstName,
+          lastName: plain.employee.lastName,
+          roleId: plain.employee.roleId,
+          source: "employee",
+        };
+      } else if (plain.users) {
+        plain.createdBy = {
+          id: plain.users.id,
+          name: plain.users.name,
+          roleId: plain.users.roleId,
+          source: "user",
+        };
+      } else {
+        plain.createdBy = null;
+      }
+
+      return plain;
     });
 
     return {
       total: count,
       limit,
       offset,
-      data: rows,
+      data,
     };
   }
-
-
-
 
 
 public async deleteOrHidePost(

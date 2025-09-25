@@ -104,7 +104,7 @@ forumRouter.post("/addAdminComment", (req, res) => {
 
 
 // Search & filter threads
-forumRouter.get("/filterThreads", (req, res) => forumController.getFilteredThreads(req, res));
+forumRouter.get("/fetchThreads", (req, res) => forumController.fetchThreads(req, res));
 
 
 // Delete / Hide Post
