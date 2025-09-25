@@ -508,14 +508,15 @@ public getAllDiscussions = async (req: Request, res: Response) => {
 
 
 
-  public getFilteredThreads = async (req: Request, res: Response) => {
-    try {
-      const data = await this.__service.getFilteredThreads(req.query);
-      res.status(200).json({ success: true, data });
-    } catch (error: any) {
-      res.status(500).json({ success: false, message: error.message });
-    }
-  };
+  public fetchThreads = async (req: Request, res: Response) => {
+  try {
+    const data = await this.__service.fetchThreads(req.query);
+    res.status(200).json({ success: true, data });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 
 
 public deleteOrHidePost = async (req: Request, res: Response) => {
@@ -535,6 +536,92 @@ public deleteOrHidePost = async (req: Request, res: Response) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+
+
+
+
+
+
+
+public hideMessage = async (req: Request, res: Response) => {
+  try {
+    const { messageId } = req.params;
+    const { adminId } = req.body; // pass adminId in request body
+
+    const result = await this.__service.hideMessage(
+      Number(messageId),
+      Number(adminId)
+    );
+
+    return res.json(result);
+  } catch (error: any) {
+    console.error("Error hiding message:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+public unhideMessage = async (req: Request, res: Response) => {
+  try {
+    const { messageId } = req.params;
+
+    const result = await this.__service.unhideMessage(Number(messageId));
+
+    return res.json(result);
+  } catch (error: any) {
+    console.error("Error unhiding message:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+
+
+
+
+public updateThreadStatus = async (req: Request, res: Response) => {
+  try {
+    let { threadId, action, adminId } = req.body;
+
+    // Handle text/plain JSON
+    if (typeof req.body === "string") {
+      try {
+        const parsed = JSON.parse(req.body);
+        threadId = parsed.threadId;
+        action = parsed.action;
+        adminId = parsed.adminId;
+      } catch {
+        return res.status(400).json({ message: "Invalid JSON in text/plain body" });
+      }
+    }
+
+    if (!threadId || !action) {
+      return res.status(400).json({ message: "threadId and action are required" });
+    }
+
+    const result = await this.__service.updateThreadStatus(threadId, action, adminId);
+
+    // Return 409 only if the action was already done
+    if (!result.success) {
+      return res.status(409).json({
+        statusCode: 409,
+        message: result.message,
+      });
+    }
+
+    // Otherwise, return 200
+    return res.status(200).json({
+      statusCode: 200,
+      message: result.message,
+      response: result.thread,
+    });
+  } catch (err: any) {
+    console.error(err);
+    res.status(500).json({ message: err.message || "Internal Server Error" });
+  }
+};
+
+
+
 
 
 

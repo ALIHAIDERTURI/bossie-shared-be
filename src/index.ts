@@ -30,6 +30,9 @@ app.use("/api", routes);
 // only for forumRouters
 app.use("/forum", forumRouter);  
 
+
+
+
 export const server: http.Server = http.createServer(app);
 const io = new Server(server);
 app.use(express.static(path.resolve("./public")));

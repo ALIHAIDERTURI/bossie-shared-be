@@ -19,6 +19,7 @@ import {
 import { globalIo } from "..";
 import { Op, Sequelize, Transaction } from "sequelize";
 import { sequelize } from "@src/config/database";
+
 const io = require("socket.io");
 
 export class ForumService {
@@ -959,9 +960,16 @@ export class ForumService {
         };
       }
 
+      if (msg.isHidden) {
+      return {
+      ...msg.toJSON(),
+      message: "⚠️ This message has been hidden by a moderator.",
+      };
+}
+
       return msg;
     });
-
+    
     return filtered;
   }
 
@@ -1089,55 +1097,58 @@ export class ForumService {
 
 
   public async editThreadPost(data: any, transaction?: Transaction): Promise<any> {
-    const { threadId, title, description, categoryId, subCategoryId, locked, reason } = data;
+  const { threadId, title, description, categoryId, subCategoryId, locked, reason, logo } = data;
 
-    // Check if thread exists
-    const thread = await threads.findByPk(threadId);
-    if (!thread) {
-      throw new Error("Thread not found.");
-    }
-
-    // Check if category exists
-    const category = await forumCategory.findByPk(categoryId);
-    if (!category) throw new Error("Category not found.");
-
-    // Check if subcategory exists
-    const subCategory = await forumSubCategory.findOne({
-      where: { id: subCategoryId, categoryId }
-    });
-    if (!subCategory) throw new Error("Subcategory not found.");
-
-    // Update thread
-    await thread.update({ title, description, categoryId, subCategoryId, locked }, { transaction });
-
-    // Fetch users who participated in messages
-    const participantMessages = await messages.findAll({ where: { roomId: threadId } });
-
-    const userIds: Set<number> = new Set();
-    const empIds: Set<number> = new Set();
-
-    participantMessages.forEach(msg => {
-      if (msg.userId) userIds.add(msg.userId);
-      if (msg.empId) empIds.add(msg.empId);
-    });
-
-    // TODO: Send notification to thread owner
-    const ownerNotificationTargets = thread.roleId === 3 ? [thread.ownerEmpId] : [thread.ownerId];
-
-    // TODO: Send notification to participants
-    // Example structure:
-    // for (const userId of userIds) sendNotification(userId, `Your thread was edited: ${reason}`);
-    // for (const empId of empIds) sendNotification(empId, `A thread you participated in was edited: ${reason}`);
-
-    // TODO: Log audit trail
-    // Example: save into a "threadAuditTrail" table with threadId, action, reason, timestamp
-
-    return {
-      success: true,
-      message: "Thread updated successfully",
-      data: { threadId, title, description, categoryId, subCategoryId, locked, reason }
-    };
+  // Check if thread exists
+  const thread = await threads.findByPk(threadId);
+  if (!thread) {
+    throw new Error("Thread not found.");
   }
+
+  // Check if category exists
+  const category = await forumCategory.findByPk(categoryId);
+  if (!category) throw new Error("Category not found.");
+
+  // Check if subcategory exists
+  const subCategory = await forumSubCategory.findOne({
+    where: { id: subCategoryId, categoryId }
+  });
+  if (!subCategory) throw new Error("Subcategory not found.");
+
+  // Update thread (logo included, if provided)
+  await thread.update(
+    { title, description, categoryId, subCategoryId, locked, ...(logo ? { logo } : {}) },
+    { transaction }
+  );
+
+  // Fetch users who participated in messages
+  const participantMessages = await messages.findAll({ where: { roomId: threadId } });
+
+  const userIds: Set<number> = new Set();
+  const empIds: Set<number> = new Set();
+
+  participantMessages.forEach(msg => {
+    if (msg.userId) userIds.add(msg.userId);
+    if (msg.empId) empIds.add(msg.empId);
+  });
+
+  // TODO: Send notification to thread owner
+  const ownerNotificationTargets = thread.roleId === 3 ? [thread.ownerEmpId] : [thread.ownerId];
+
+  // TODO: Send notification to participants
+  // for (const userId of userIds) sendNotification(userId, `Your thread was edited: ${reason}`);
+  // for (const empId of empIds) sendNotification(empId, `A thread you participated in was edited: ${reason}`);
+
+  // TODO: Log audit trail
+  // Example: save into a "threadAuditTrail" table with threadId, action, reason, timestamp
+
+  return {
+    success: true,
+    message: "Thread updated successfully",
+    data: { threadId, title, description, categoryId, subCategoryId, locked, reason, logo: logo ?? thread.logo }
+  };
+}
+
 
 
 // Add Admin Comment
@@ -1173,77 +1184,167 @@ export class ForumService {
 
 
 // Search and Filter
+ 
 
 
 
-  
-  public async getFilteredThreads(query: any) {
-    const { limit = 10, offset = 0, filters = {} } = query;
-    const { user, title, status, flags, dateFrom, dateTo } = filters;
+
+
+  public async fetchThreads(query: any) {
+    const { limit = 10, offset = 0, filters = {}, subCategoryId } = query;
+    const { user, title, status, flags, dateFrom, dateTo } = filters || {};
 
     const whereClause: any = {};
 
-    // Filter by thread title
-    if (title) {
-      whereClause.title = { [Op.like]: `%${title}%` };
+    // SubCategory filter
+    if (subCategoryId) {
+      whereClause.subCategoryId = subCategoryId;
     }
 
-    // Filter by status (locked = closed)
+    // Title OR Description filter
+    if (title) {
+      whereClause[Op.or] = [
+        { title: { [Op.like]: `%${title}%` } },
+        { description: { [Op.like]: `%${title}%` } },
+      ];
+    }
+
+    // Status filter (locked = closed)
     if (status === "open") whereClause.locked = false;
     if (status === "closed") whereClause.locked = true;
 
-    // Filter by date range
+    // Date range
     if (dateFrom || dateTo) {
       whereClause.createdAt = {};
       if (dateFrom) whereClause.createdAt[Op.gte] = new Date(dateFrom);
       if (dateTo) whereClause.createdAt[Op.lte] = new Date(dateTo);
     }
 
-    // Include flags: suggested / pinned (assuming columns exist)
-    if (flags) {
-      if (typeof flags.suggested !== "undefined") whereClause["suggested"] = flags.suggested;
-      if (typeof flags.pinned !== "undefined") whereClause["pinned"] = flags.pinned;
+    // Flags (pinned only)
+    if (flags && typeof flags.pinned !== "undefined") {
+      whereClause.pinned = flags.pinned;
     }
 
-    // Search by user name
+    // Include clause: users -> roleData, and employee
     const includeClause: any[] = [
       {
         model: users,
-        attributes: ["id", "name"],
-        where: user ? { name: { [Op.like]: `%${user}%` } } : undefined,
+        attributes: ["id", "name", "roleId"],
+        include: [
+          {
+            model: roleData,
+            attributes: ["firstName", "lastName"],
+          },
+        ],
+        where: user
+          ? {
+              [Op.or]: [
+                { name: { [Op.like]: `%${user}%` } },
+                Sequelize.where(
+                  Sequelize.fn(
+                    "concat",
+                    Sequelize.col("users->roleData.firstName"),
+                    " ",
+                    Sequelize.col("users->roleData.lastName")
+                  ),
+                  { [Op.like]: `%${user}%` }
+                ),
+              ],
+            }
+          : undefined,
+        required: false,
       },
       {
         model: employee,
-        attributes: ["id", "firstName", "lastName"],
+        attributes: ["id", "firstName", "lastName", "roleId"],
         where: user
-          ? Sequelize.where(
-              Sequelize.fn("concat", Sequelize.col("firstName"), " ", Sequelize.col("lastName")),
-              {
-                [Op.like]: `%${user}%`,
-              }
-            )
+          ? {
+              [Op.or]: [
+                { firstName: { [Op.like]: `%${user}%` } },
+                { lastName: { [Op.like]: `%${user}%` } },
+              ],
+            }
           : undefined,
+        required: false,
       },
     ];
 
     const { count, rows } = await threads.findAndCountAll({
       where: whereClause,
       include: includeClause,
+      attributes: {
+        exclude: ["suggested", "hidden"],
+      },
       limit,
       offset,
       order: [["createdAt", "desc"]],
+    });
+
+    const data = rows.map((r: any) => {
+      const plain = r.get ? r.get({ plain: true }) : r;
+
+      // cleanup
+      if ("suggested" in plain) delete plain.suggested;
+      if ("hidden" in plain) delete plain.hidden;
+
+      // normalize users
+      if (plain.user) {
+        const u = plain.user;
+        plain.users = {
+          id: u.id,
+          name: u.name,
+          roleId: u.roleId ?? null,
+          roleData: {
+            roleId: u.roleId ?? null,
+            firstName: u.roleData?.firstName ?? null,
+            lastName: u.roleData?.lastName ?? null,
+          },
+        };
+        delete plain.user;
+      } else if (plain.users) {
+        const u = plain.users;
+        plain.users = {
+          id: u.id,
+          name: u.name,
+          roleId: u.roleId ?? null,
+          roleData: {
+            roleId: u.roleId ?? null,
+            firstName: u.roleData?.firstName ?? null,
+            lastName: u.roleData?.lastName ?? null,
+          },
+        };
+      }
+
+      // 🔥 Add createdBy field
+      if (plain.employee) {
+        plain.createdBy = {
+          id: plain.employee.id,
+          firstName: plain.employee.firstName,
+          lastName: plain.employee.lastName,
+          roleId: plain.employee.roleId,
+          source: "employee",
+        };
+      } else if (plain.users) {
+        plain.createdBy = {
+          id: plain.users.id,
+          name: plain.users.name,
+          roleId: plain.users.roleId,
+          source: "user",
+        };
+      } else {
+        plain.createdBy = null;
+      }
+
+      return plain;
     });
 
     return {
       total: count,
       limit,
       offset,
-      data: rows,
+      data,
     };
   }
-
-
-
 
 
 public async deleteOrHidePost(
@@ -1295,6 +1396,109 @@ public async deleteOrHidePost(
 
   return { success: true, message: `Post ${action}d successfully` };
 }
+
+
+
+
+
+  public async hideMessage(messageId: number, adminId: number) {
+    const msg = await messages.findByPk(messageId);
+
+    if (!msg) {
+      throw new Error("Message not found");
+    }
+
+    await msg.update({ isHidden: true, hiddenBy: adminId });
+
+    return {
+      success: true,
+      message: "Message hidden successfully",
+      data: {
+        id: msg.id,
+        isHidden: msg.isHidden,
+        hiddenBy: msg.hiddenBy,
+      },
+    };
+  }
+
+  public async unhideMessage(messageId: number) {
+    const msg = await messages.findByPk(messageId);
+
+    if (!msg) {
+      throw new Error("Message not found");
+    }
+
+    await msg.update({ isHidden: false, hiddenBy: null });
+
+    return {
+      success: true,
+      message: "Message unhidden successfully",
+    };
+  }
+
+
+public updateThreadStatus = async (
+  threadId: number,
+  action: string,
+  adminId?: number
+): Promise<{ success: boolean; message: string; thread?: threads }> => {
+  const thread = await threads.findByPk(threadId);
+  if (!thread) return { success: false, message: "Thread not found" };
+
+  switch (action) {
+    case "lock":
+      if (thread.locked)
+        return { success: false, message: "Thread is already locked", thread };
+      thread.locked = true;
+      await thread.save();
+      await threadLog.create({ threadId, isLocked: true, lockedBy: adminId ?? undefined });
+      return { success: true, message: "Thread locked successfully", thread };
+
+    case "unlock":
+      if (!thread.locked)
+        return { success: false, message: "Thread is already unlocked", thread };
+      thread.locked = false;
+      await thread.save();
+      await threadLog.create({ threadId, isLocked: false, unLockedBy: adminId ?? undefined });
+      return { success: true, message: "Thread unlocked successfully", thread };
+
+    case "hide":
+      if (thread.hidden)
+        return { success: false, message: "Thread is already hidden", thread };
+      thread.hidden = true;
+      await thread.save();
+      return { success: true, message: "Thread hidden successfully", thread };
+
+    case "unhide":
+      if (!thread.hidden)
+        return { success: false, message: "Thread is already visible", thread };
+      thread.hidden = false;
+      await thread.save();
+      return { success: true, message: "Thread unhidden successfully", thread };
+
+    case "pin":
+      if (thread.pinned)
+        return { success: false, message: "Thread is already pinned", thread };
+      thread.pinned = true;
+      await thread.save();
+      return { success: true, message: "Thread pinned successfully", thread };
+
+    case "unpin":
+      if (!thread.pinned)
+        return { success: false, message: "Thread is already unpinned", thread };
+      thread.pinned = false;
+      await thread.save();
+      return { success: true, message: "Thread unpinned successfully", thread };
+
+    default:
+      return { success: false, message: "Invalid action" };
+  }
+};
+
+
+
+
+
 
 
 

@@ -21,7 +21,11 @@ export interface threadLogI {
   unLockedBy?: number;
   createdAt?: Date;
   updatedAt?: Date;
-  deletedAt?: Date | null;
+  deletedAt?: Date;
+  isHidden?: boolean;
+  hiddenBy?: number;
+  isPinned?: boolean;
+  pinnedBy?: number;  
 }
 
 @Table({
@@ -77,6 +81,23 @@ export class threadLog extends Model<threadLogI> {
 
   @Column(DataType.DATE)
   public deletedAt: Date;
+  
+
+@Column(DataType.TINYINT)
+public isHidden: boolean;
+
+@ForeignKey((): typeof admin => admin)
+@Column(DataType.INTEGER)
+public hiddenBy: number;
+
+@Column(DataType.TINYINT)
+public isPinned: boolean;
+
+@ForeignKey((): typeof admin => admin)
+@Column(DataType.INTEGER)
+public pinnedBy: number;
+
 }
+
 
 //edit-1, locked-2, delete-3 , unlocked-4

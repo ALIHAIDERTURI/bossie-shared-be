@@ -159,14 +159,16 @@ export const createReportValidator = Joi.object({
 export const getAllDiscussionsValidator = Joi.object({}).optional();
 
 export const editThreadValidator = Joi.object({
-  threadId: Joi.number().required(),
-  title: Joi.string().min(3).max(255).required(),
-  description: Joi.string().min(5).max(5000).required(),
-  categoryId: Joi.number().required(),
-  subCategoryId: Joi.number().required(),
-  locked: Joi.boolean().required(),
-  reason: Joi.string().min(5).max(255).required()
+  threadId: Joi.number().required(), // must have this to identify the thread
+  title: Joi.string().min(3).max(255).optional(),
+  description: Joi.string().min(5).max(5000).optional(),
+  categoryId: Joi.number().optional(),
+  subCategoryId: Joi.number().optional(),
+  locked: Joi.boolean().optional(),
+  reason: Joi.string().min(5).max(255).optional(),
+  logo: Joi.string().min(3).max(255).optional()
 });
+
 
 
 export const addAdminCommentValidator = Joi.object({
@@ -181,7 +183,8 @@ export const addAdminCommentValidator = Joi.object({
 
 
 
-export const getFilteredThreadsSchema = Joi.object({
+export const fetchThreadsSchema = Joi.object({
+  subCategoryId: Joi.number().integer().required(),
   limit: Joi.number().integer().min(1).max(100).default(10),
   offset: Joi.number().integer().min(0).default(0),
   filters: Joi.object({
@@ -189,10 +192,19 @@ export const getFilteredThreadsSchema = Joi.object({
     title: Joi.string().optional(),
     status: Joi.string().valid("open", "closed").optional(),
     flags: Joi.object({
-      suggested: Joi.boolean().optional(),
       pinned: Joi.boolean().optional(),
     }).optional(),
     dateFrom: Joi.date().optional(),
     dateTo: Joi.date().optional(),
-  }).optional()
-}).optional();
+  }).optional(),
+});
+
+
+
+export const updateThreadStatusSchema = Joi.object({
+  threadId: Joi.number().integer().required(),
+  action: Joi.string()
+    .valid("lock", "unlock", "hide", "unhide", "pin", "unpin")
+    .required(),
+  adminId: Joi.number().integer().optional(), // only for lock/unlock
+});

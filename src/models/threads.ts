@@ -26,12 +26,13 @@ export interface threadsI {
   subCategoryId?: number;
   description?: string;
   logo?: string;
-  locked?: boolean;
+  locked?: boolean | null;
   suggested?: boolean;
   pinned?: boolean;
   createdAt?: Date;
   updatedAt?: Date;
   deletedAt?: Date | null;
+  hidden?: boolean | null;
 }
 
 @Table({
@@ -92,7 +93,13 @@ export class threads extends Model<threadsI> {
     type: DataType.TINYINT,
     defaultValue: 0,
   })
-  public locked: boolean;
+  public locked: boolean | null;
+
+  @Column({
+    type: DataType.TINYINT,
+    defaultValue: 0,
+  })
+  public hidden: boolean | null;
 
   @Column({
     type: DataType.TINYINT,
@@ -113,7 +120,7 @@ export class threads extends Model<threadsI> {
   public updatedAt: Date;
 
   @Column(DataType.DATE)
-  public deletedAt: Date;
+  public deletedAt: Date | null;
 
   @Column({
     type: DataType.INTEGER,

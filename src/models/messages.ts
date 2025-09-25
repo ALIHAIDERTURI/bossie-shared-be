@@ -24,6 +24,8 @@ export interface messagesI {
   createdAt?: Date;
   updatedAt?: Date;
   deletedAt?: Date | null;
+  isHidden?: boolean;
+  hiddenBy?: number | null;
 }
 
 @Table({
@@ -75,4 +77,14 @@ export class messages extends Model<messagesI> {
 
   @Column(DataType.DATE)
   public deletedAt: Date;
+
+  @Column({
+  type: DataType.BOOLEAN,
+  defaultValue: false,
+})
+public isHidden: boolean;
+
+@Column(DataType.INTEGER)
+public hiddenBy: number | null;
+
 }
