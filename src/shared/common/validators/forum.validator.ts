@@ -196,3 +196,12 @@ export const getFilteredThreadsSchema = Joi.object({
     dateTo: Joi.date().optional(),
   }).optional()
 }).optional();
+
+
+export const updateThreadStatusSchema = Joi.object({
+  threadId: Joi.number().integer().required(),
+  action: Joi.string()
+    .valid("lock", "unlock", "hide", "unhide", "pin", "unpin")
+    .required(),
+  adminId: Joi.number().integer().optional(), // only for lock/unlock
+});

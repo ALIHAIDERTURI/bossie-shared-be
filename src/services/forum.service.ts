@@ -1344,6 +1344,69 @@ public async deleteOrHidePost(
   }
 
 
+public updateThreadStatus = async (
+  threadId: number,
+  action: string,
+  adminId?: number
+): Promise<{ success: boolean; message: string; thread?: threads }> => {
+  const thread = await threads.findByPk(threadId);
+  if (!thread) return { success: false, message: "Thread not found" };
+
+  switch (action) {
+    case "lock":
+      if (thread.locked)
+        return { success: false, message: "Thread is already locked", thread };
+      thread.locked = true;
+      await thread.save();
+      await threadLog.create({ threadId, isLocked: true, lockedBy: adminId ?? undefined });
+      return { success: true, message: "Thread locked successfully", thread };
+
+    case "unlock":
+      if (!thread.locked)
+        return { success: false, message: "Thread is already unlocked", thread };
+      thread.locked = false;
+      await thread.save();
+      await threadLog.create({ threadId, isLocked: false, unLockedBy: adminId ?? undefined });
+      return { success: true, message: "Thread unlocked successfully", thread };
+
+    case "hide":
+      if (thread.hidden)
+        return { success: false, message: "Thread is already hidden", thread };
+      thread.hidden = true;
+      await thread.save();
+      return { success: true, message: "Thread hidden successfully", thread };
+
+    case "unhide":
+      if (!thread.hidden)
+        return { success: false, message: "Thread is already visible", thread };
+      thread.hidden = false;
+      await thread.save();
+      return { success: true, message: "Thread unhidden successfully", thread };
+
+    case "pin":
+      if (thread.pinned)
+        return { success: false, message: "Thread is already pinned", thread };
+      thread.pinned = true;
+      await thread.save();
+      return { success: true, message: "Thread pinned successfully", thread };
+
+    case "unpin":
+      if (!thread.pinned)
+        return { success: false, message: "Thread is already unpinned", thread };
+      thread.pinned = false;
+      await thread.save();
+      return { success: true, message: "Thread unpinned successfully", thread };
+
+    default:
+      return { success: false, message: "Invalid action" };
+  }
+};
+
+
+
+
+
+
 
 
   // Helper functions

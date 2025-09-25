@@ -575,4 +575,53 @@ public unhideMessage = async (req: Request, res: Response) => {
 
 
 
+
+
+public updateThreadStatus = async (req: Request, res: Response) => {
+  try {
+    let { threadId, action, adminId } = req.body;
+
+    // Handle text/plain JSON
+    if (typeof req.body === "string") {
+      try {
+        const parsed = JSON.parse(req.body);
+        threadId = parsed.threadId;
+        action = parsed.action;
+        adminId = parsed.adminId;
+      } catch {
+        return res.status(400).json({ message: "Invalid JSON in text/plain body" });
+      }
+    }
+
+    if (!threadId || !action) {
+      return res.status(400).json({ message: "threadId and action are required" });
+    }
+
+    const result = await this.__service.updateThreadStatus(threadId, action, adminId);
+
+    // Return 409 only if the action was already done
+    if (!result.success) {
+      return res.status(409).json({
+        statusCode: 409,
+        message: result.message,
+      });
+    }
+
+    // Otherwise, return 200
+    return res.status(200).json({
+      statusCode: 200,
+      message: result.message,
+      response: result.thread,
+    });
+  } catch (err: any) {
+    console.error(err);
+    res.status(500).json({ message: err.message || "Internal Server Error" });
+  }
+};
+
+
+
+
+
+
 }

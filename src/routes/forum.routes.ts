@@ -115,3 +115,6 @@ forumRouter.post("/forum/post/moderate", (req, res) => forumController.deleteOrH
 
 forumRouter.put("/messages/:messageId/hide", (req, res) => forumController.hideMessage(req, res));
 forumRouter.put("/messages/:messageId/unhide", (req, res) => forumController.unhideMessage(req, res));
+
+// Single API for lock/unlock, hide/unhide, pin/unpin
+forumRouter.post("/thread/updateStatus", (req, res) => forumController.updateThreadStatus(req, res));
