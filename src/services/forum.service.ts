@@ -122,20 +122,31 @@ export class ForumService {
     return await forumSubCategory.create({ ...data });
   };
 
-  public getForumCategoryList = async (): Promise<any> => {
+    public getForumCategoryList = async (): Promise<any> => {
     const forumData: any = await forumCategory.findAndCountAll({
       where: { deletedAt: null },
-      attributes: { exclude: ["deletedAt", "updatedAt"] },
       include: [
         {
-          as: "forumSubCategory",
           model: forumSubCategory,
-          attributes: { exclude: ["deletedAt", "updatedAt"] },
+          as: "forumSubCategory",
         },
       ],
-      distinct: true,
+      order: [["priority", "ASC"], ["id", "ASC"]],
     });
-    return forumData;
+
+    const rows = (forumData.rows || []).map((r: any) => {
+      const plain = r.get ? r.get({ plain: true }) : r;
+      if (plain.forumSubCategory) {
+        plain.forumSubCategory.sort((a: any, b: any) => {
+          const pa = a.priority ?? 999;
+          const pb = b.priority ?? 999;
+          return pa - pb || a.id - b.id;
+        });
+      }
+      return plain;
+    });
+
+    return { count: forumData.count, rows };
   };
 
   public getForumMainCategory = async (): Promise<any> => {
@@ -144,6 +155,7 @@ export class ForumService {
       attributes: {
         exclude: ["deletedAt", "updatedAt", "createdAt", "description"],
       },
+      order: [["priority", "ASC"], ["id", "ASC"]],
     });
     return forumData;
   };
@@ -155,6 +167,7 @@ export class ForumService {
       attributes: {
         exclude: ["deletedAt", "updatedAt", "description", "createdAt"],
       },
+      order: [["priority", "ASC"], ["id", "ASC"]],
     });
     return forumData;
   };
@@ -1496,6 +1509,40 @@ public updateThreadStatus = async (
       return { success: false, message: "Invalid action" };
   }
 };
+
+
+
+
+
+  /* --- Save Category Priorities --- */
+  public saveCategoryPriority = async (data: any): Promise<any> => {
+    const { priorities } = data; // [{ id, priority }]
+    if (!Array.isArray(priorities)) throw new Error("Invalid priorities payload");
+
+    for (const item of priorities) {
+      await forumCategory.update(
+        { priority: item.priority },
+        { where: { id: item.id } }
+      );
+    }
+    return { success: true, message: "Category priorities updated" };
+  };
+
+  /* --- Save SubCategory Priorities --- */
+  public saveSubCategoryPriority = async (data: any): Promise<any> => {
+    const { priorities } = data;
+    if (!Array.isArray(priorities)) throw new Error("Invalid priorities payload");
+
+    for (const item of priorities) {
+      await forumSubCategory.update(
+        { priority: item.priority },
+        { where: { id: item.id } }
+      );
+    }
+    return { success: true, message: "SubCategory priorities updated" };
+  };
+
+
 
 
 

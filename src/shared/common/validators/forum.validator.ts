@@ -208,3 +208,15 @@ export const updateThreadStatusSchema = Joi.object({
     .required(),
   adminId: Joi.number().integer().optional(), // only for lock/unlock
 });
+
+
+export const savePriorityValidator = Joi.object({
+  priorities: Joi.array()
+    .items(
+      Joi.object({
+        id: Joi.number().required(),
+        priority: Joi.number().required(),
+      })
+    )
+    .required(),
+});
