@@ -10,6 +10,7 @@ import {
 } from "sequelize-typescript";
 import { privateThreads } from "./privateThreads";
 import { threads } from "./threads";
+import { users } from "./users"; 
 
 export interface reportI {
   id?: number;
@@ -37,6 +38,10 @@ export class report extends Model<reportI> {
 
   @BelongsTo((): typeof threads => threads)
   public threads: typeof threads;
+
+  @BelongsTo((): typeof users => users, { foreignKey: "userId", as: "reporterUser" })
+  public reporterUser: typeof users;
+
 
   @PrimaryKey
   @AutoIncrement

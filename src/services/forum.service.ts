@@ -981,37 +981,39 @@ export class ForumService {
   const reports = await report.findAll({
     include: [
       {
-        as: "threads",
         model: threads,
-        attributes: ["id", "title", "description", "createdAt"]
+        as: "threads",
       },
       {
-        as: "privateThreads",
         model: privateThreads,
-        attributes: ["id", "title", "createdAt"]
-      }
+        as: "privateThreads",
+      },
+      {
+        model: users,
+        as: "reporterUser",
+        attributes: ["id", "name", "email", "roleId"],
+      },
     ],
-    order: [["createdAt", "DESC"]]
+    order: [["createdAt", "DESC"]],
   });
 
   return reports.map((r: any) => ({
     id: r.id,
     problem: r.problem,
-    statusId: r.statusId,
-    createdAt: r.createdAt,
+    note: "Please view the detail page", // static note as per requirement
     reportedThread: r.reportedThreadId ? r.threads : null,
     reportedPrivateThread: r.reportedP_ThreadId ? r.privateThreads : null,
-    reporter: {
-      userId: r.userId,
-      roleId: r.roleId
-    },
-    reportedUser: {
-      userId: r.reportedUserId,
-      roleId: r.reportedRoleId
-    },
-    messageDetail: r.messageDetail
+    reporter: r.reporterUser ? {
+      id: r.reporterUser.id,
+      name: `${r.reporterUser.name}`,
+      email: r.reporterUser.email,
+      roleId: r.reporterUser.roleId
+    } : null,
+    createdAt: r.createdAt,
   }));
 };
+
+
 
 
 
