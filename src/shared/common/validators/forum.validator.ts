@@ -29,8 +29,13 @@ export const createDicsussionSchema = Joi.object({
 
 export const getThreadByIdSchema = Joi.object({
   subCategoryId: Joi.number().integer().required(),
-
+  filters: Joi.object({
+    locked: Joi.boolean().optional(),
+    isPinned: Joi.boolean().optional(),
+    sortBy: Joi.string().valid("newest", "oldest", "mostPopular").optional(),
+  }).optional()
 });
+
 
 export const deleteThreadSchema = Joi.object({
   userId: Joi.number().integer().required(),

@@ -284,95 +284,101 @@ export class ForumService {
   };
 
   public getThreadById = async (data: any): Promise<any> => {
-    const { filters, subCategoryId } = data;
+  const { filters, subCategoryId } = data;
 
-    // ******* Sort by *************************
+  let orderClause: any = [];
+  let whereClause: any = {};
 
-    let orderClause: any = [];
-    let whereClause: any = {};
+  // filter by locked
+  if (filters?.locked === true || filters?.locked === false) {
+    whereClause.locked = filters.locked;
+  }
 
-    if (filters?.locked == true || filters?.locked == false) {
-      whereClause.locked = filters.locked;
-    }
+  // 🔹 filter by pinned
+  if (filters?.isPinned === true || filters?.isPinned === false) {
+    whereClause.pinned = filters.isPinned;
+  }
 
-    switch (filters?.sortBy) {
-      case "newest":
-        orderClause = [["createdAt", "desc"]];
-        break;
-      case "oldest":
-        orderClause = [["createdAt", "asc"]];
-        break;
-      case "mostPopular":
-        orderClause = [
-          [
-            Sequelize.literal(
-              "(SELECT COUNT(*) FROM messages WHERE messages.roomId = threads.id)"
-            ),
-            "DESC",
-          ],
-        ];
-        break;
-      default:
-        orderClause = [["createdAt", "desc"]];
-        break;
-    }
+  // sorting
+  switch (filters?.sortBy) {
+    case "newest":
+      orderClause = [["createdAt", "desc"]];
+      break;
+    case "oldest":
+      orderClause = [["createdAt", "asc"]];
+      break;
+    case "mostPopular":
+      orderClause = [
+        [
+          Sequelize.literal(
+            "(SELECT COUNT(*) FROM messages WHERE messages.roomId = threads.id)"
+          ),
+          "DESC",
+        ],
+      ];
+      break;
+    default:
+      orderClause = [["createdAt", "desc"]];
+      break;
+  }
 
-    const allThreads: any = await threads.findAndCountAll({
-      where: { subCategoryId, ...whereClause },
-      order: orderClause.length ? orderClause : undefined,
-      attributes: { exclude: ["deletedAt", "updatedAt"] },
-      include: [
-        {
-          as: "users",
-          model: users,
-          attributes: ["name"],
-          include: [
-            {
-              as: "roleData",
-              model: roleData,
-              attributes: ["companyName", "firstName", "lastName", "profile"],
-            },
-          ],
-        },
-        {
-          as: "employee",
-          model: employee,
-          attributes: [
-            "id",
-            "firstName",
-            "lastName",
-            "profile",
-            [Sequelize.literal("3"), "roleId"],
-          ],
-          include: [
-            {
-              as: "users",
-              model: users,
-              attributes: ["name"],
-              include: [
-                {
-                  as: "roleData",
-                  model: roleData,
-                  attributes: ["companyName", "firstName", "lastName"],
-                },
-              ],
-            },
-          ],
-        },
-        {
-          as: "forumCategory",
-          model: forumCategory,
-          attributes: ["name"],
-        },
-        {
-          as: "forumSubCategory",
-          model: forumSubCategory,
-          attributes: ["name"],
-        },
-      ],
-    });
-    return allThreads;
-  };
+  const allThreads: any = await threads.findAndCountAll({
+    where: { subCategoryId, ...whereClause },
+    order: orderClause.length ? orderClause : undefined,
+    attributes: { exclude: ["deletedAt", "updatedAt"] },
+    include: [
+      {
+        as: "users",
+        model: users,
+        attributes: ["name"],
+        include: [
+          {
+            as: "roleData",
+            model: roleData,
+            attributes: ["companyName", "firstName", "lastName", "profile"],
+          },
+        ],
+      },
+      {
+        as: "employee",
+        model: employee,
+        attributes: [
+          "id",
+          "firstName",
+          "lastName",
+          "profile",
+          [Sequelize.literal("3"), "roleId"],
+        ],
+        include: [
+          {
+            as: "users",
+            model: users,
+            attributes: ["name"],
+            include: [
+              {
+                as: "roleData",
+                model: roleData,
+                attributes: ["companyName", "firstName", "lastName"],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        as: "forumCategory",
+        model: forumCategory,
+        attributes: ["name"],
+      },
+      {
+        as: "forumSubCategory",
+        model: forumSubCategory,
+        attributes: ["name"],
+      },
+    ],
+  });
+  return allThreads;
+};
+
 
   public deleteThread = async (
     data: any,
