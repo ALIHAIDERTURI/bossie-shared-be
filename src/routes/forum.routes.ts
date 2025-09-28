@@ -118,3 +118,18 @@ forumRouter.put("/messages/:messageId/unhide", (req, res) => forumController.unh
 
 // Single API for lock/unlock, hide/unhide, pin/unpin
 forumRouter.post("/thread/updateStatus", (req, res) => forumController.updateThreadStatus(req, res));
+
+
+
+
+
+// Save priorities
+forumRouter.put("/saveCategoryPriority", (req, res) =>
+  forumController.saveCategoryPriority(req, res)
+);
+
+forumRouter.put("/saveSubCategoryPriority", (req, res) =>
+  forumController.saveSubCategoryPriority(req, res)
+);
+
+

@@ -14,7 +14,8 @@ import {
   updateCategorySchema,
   addBannedKeywordSchema,
   removeBannedKeywordSchema,
-  editThreadValidator 
+  editThreadValidator,
+  savePriorityValidator 
 } from "@src/shared/common/validators/forum.validator";
 import {
   defaultSchema,
@@ -620,6 +621,35 @@ public updateThreadStatus = async (req: Request, res: Response) => {
   }
 };
 
+
+
+
+
+  public saveCategoryPriority = async (req: Request, res: Response) => {
+    try {
+      const { error } = savePriorityValidator.validate(req.body);
+      if (error)
+        return res.status(400).json({ success: false, message: error.message });
+
+      const result = await this.__service.saveCategoryPriority(req.body);
+      res.status(200).json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  };
+
+  public saveSubCategoryPriority = async (req: Request, res: Response) => {
+    try {
+      const { error } = savePriorityValidator.validate(req.body);
+      if (error)
+        return res.status(400).json({ success: false, message: error.message });
+
+      const result = await this.__service.saveSubCategoryPriority(req.body);
+      res.status(200).json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  };
 
 
 

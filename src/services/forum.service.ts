@@ -122,20 +122,31 @@ export class ForumService {
     return await forumSubCategory.create({ ...data });
   };
 
-  public getForumCategoryList = async (): Promise<any> => {
+    public getForumCategoryList = async (): Promise<any> => {
     const forumData: any = await forumCategory.findAndCountAll({
       where: { deletedAt: null },
-      attributes: { exclude: ["deletedAt", "updatedAt"] },
       include: [
         {
-          as: "forumSubCategory",
           model: forumSubCategory,
-          attributes: { exclude: ["deletedAt", "updatedAt"] },
+          as: "forumSubCategory",
         },
       ],
-      distinct: true,
+      order: [["priority", "ASC"], ["id", "ASC"]],
     });
-    return forumData;
+
+    const rows = (forumData.rows || []).map((r: any) => {
+      const plain = r.get ? r.get({ plain: true }) : r;
+      if (plain.forumSubCategory) {
+        plain.forumSubCategory.sort((a: any, b: any) => {
+          const pa = a.priority ?? 999;
+          const pb = b.priority ?? 999;
+          return pa - pb || a.id - b.id;
+        });
+      }
+      return plain;
+    });
+
+    return { count: forumData.count, rows };
   };
 
   public getForumMainCategory = async (): Promise<any> => {
@@ -144,6 +155,7 @@ export class ForumService {
       attributes: {
         exclude: ["deletedAt", "updatedAt", "createdAt", "description"],
       },
+      order: [["priority", "ASC"], ["id", "ASC"]],
     });
     return forumData;
   };
@@ -155,6 +167,7 @@ export class ForumService {
       attributes: {
         exclude: ["deletedAt", "updatedAt", "description", "createdAt"],
       },
+      order: [["priority", "ASC"], ["id", "ASC"]],
     });
     return forumData;
   };
@@ -271,95 +284,101 @@ export class ForumService {
   };
 
   public getThreadById = async (data: any): Promise<any> => {
-    const { filters, subCategoryId } = data;
+  const { filters, subCategoryId } = data;
 
-    // ******* Sort by *************************
+  let orderClause: any = [];
+  let whereClause: any = {};
 
-    let orderClause: any = [];
-    let whereClause: any = {};
+  // filter by locked
+  if (filters?.locked === true || filters?.locked === false) {
+    whereClause.locked = filters.locked;
+  }
 
-    if (filters?.locked == true || filters?.locked == false) {
-      whereClause.locked = filters.locked;
-    }
+  // 🔹 filter by pinned
+  if (filters?.isPinned === true || filters?.isPinned === false) {
+    whereClause.pinned = filters.isPinned;
+  }
 
-    switch (filters?.sortBy) {
-      case "newest":
-        orderClause = [["createdAt", "desc"]];
-        break;
-      case "oldest":
-        orderClause = [["createdAt", "asc"]];
-        break;
-      case "mostPopular":
-        orderClause = [
-          [
-            Sequelize.literal(
-              "(SELECT COUNT(*) FROM messages WHERE messages.roomId = threads.id)"
-            ),
-            "DESC",
-          ],
-        ];
-        break;
-      default:
-        orderClause = [["createdAt", "desc"]];
-        break;
-    }
+  // sorting
+  switch (filters?.sortBy) {
+    case "newest":
+      orderClause = [["createdAt", "desc"]];
+      break;
+    case "oldest":
+      orderClause = [["createdAt", "asc"]];
+      break;
+    case "mostPopular":
+      orderClause = [
+        [
+          Sequelize.literal(
+            "(SELECT COUNT(*) FROM messages WHERE messages.roomId = threads.id)"
+          ),
+          "DESC",
+        ],
+      ];
+      break;
+    default:
+      orderClause = [["createdAt", "desc"]];
+      break;
+  }
 
-    const allThreads: any = await threads.findAndCountAll({
-      where: { subCategoryId, ...whereClause },
-      order: orderClause.length ? orderClause : undefined,
-      attributes: { exclude: ["deletedAt", "updatedAt"] },
-      include: [
-        {
-          as: "users",
-          model: users,
-          attributes: ["name"],
-          include: [
-            {
-              as: "roleData",
-              model: roleData,
-              attributes: ["companyName", "firstName", "lastName", "profile"],
-            },
-          ],
-        },
-        {
-          as: "employee",
-          model: employee,
-          attributes: [
-            "id",
-            "firstName",
-            "lastName",
-            "profile",
-            [Sequelize.literal("3"), "roleId"],
-          ],
-          include: [
-            {
-              as: "users",
-              model: users,
-              attributes: ["name"],
-              include: [
-                {
-                  as: "roleData",
-                  model: roleData,
-                  attributes: ["companyName", "firstName", "lastName"],
-                },
-              ],
-            },
-          ],
-        },
-        {
-          as: "forumCategory",
-          model: forumCategory,
-          attributes: ["name"],
-        },
-        {
-          as: "forumSubCategory",
-          model: forumSubCategory,
-          attributes: ["name"],
-        },
-      ],
-    });
-    return allThreads;
-  };
+  const allThreads: any = await threads.findAndCountAll({
+    where: { subCategoryId, ...whereClause },
+    order: orderClause.length ? orderClause : undefined,
+    attributes: { exclude: ["deletedAt", "updatedAt"] },
+    include: [
+      {
+        as: "users",
+        model: users,
+        attributes: ["name"],
+        include: [
+          {
+            as: "roleData",
+            model: roleData,
+            attributes: ["companyName", "firstName", "lastName", "profile"],
+          },
+        ],
+      },
+      {
+        as: "employee",
+        model: employee,
+        attributes: [
+          "id",
+          "firstName",
+          "lastName",
+          "profile",
+          [Sequelize.literal("3"), "roleId"],
+        ],
+        include: [
+          {
+            as: "users",
+            model: users,
+            attributes: ["name"],
+            include: [
+              {
+                as: "roleData",
+                model: roleData,
+                attributes: ["companyName", "firstName", "lastName"],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        as: "forumCategory",
+        model: forumCategory,
+        attributes: ["name"],
+      },
+      {
+        as: "forumSubCategory",
+        model: forumSubCategory,
+        attributes: ["name"],
+      },
+    ],
+  });
+  return allThreads;
+};
+
 
   public deleteThread = async (
     data: any,
@@ -981,37 +1000,39 @@ export class ForumService {
   const reports = await report.findAll({
     include: [
       {
-        as: "threads",
         model: threads,
-        attributes: ["id", "title", "description", "createdAt"]
+        as: "threads",
       },
       {
-        as: "privateThreads",
         model: privateThreads,
-        attributes: ["id", "title", "createdAt"]
-      }
+        as: "privateThreads",
+      },
+      {
+        model: users,
+        as: "reporterUser",
+        attributes: ["id", "name", "email", "roleId"],
+      },
     ],
-    order: [["createdAt", "DESC"]]
+    order: [["createdAt", "DESC"]],
   });
 
   return reports.map((r: any) => ({
     id: r.id,
     problem: r.problem,
-    statusId: r.statusId,
-    createdAt: r.createdAt,
+    note: "Please view the detail page", // static note as per requirement
     reportedThread: r.reportedThreadId ? r.threads : null,
     reportedPrivateThread: r.reportedP_ThreadId ? r.privateThreads : null,
-    reporter: {
-      userId: r.userId,
-      roleId: r.roleId
-    },
-    reportedUser: {
-      userId: r.reportedUserId,
-      roleId: r.reportedRoleId
-    },
-    messageDetail: r.messageDetail
+    reporter: r.reporterUser ? {
+      id: r.reporterUser.id,
+      name: `${r.reporterUser.name}`,
+      email: r.reporterUser.email,
+      roleId: r.reporterUser.roleId
+    } : null,
+    createdAt: r.createdAt,
   }));
 };
+
+
 
 
 
@@ -1494,6 +1515,40 @@ public updateThreadStatus = async (
       return { success: false, message: "Invalid action" };
   }
 };
+
+
+
+
+
+  /* --- Save Category Priorities --- */
+  public saveCategoryPriority = async (data: any): Promise<any> => {
+    const { priorities } = data; // [{ id, priority }]
+    if (!Array.isArray(priorities)) throw new Error("Invalid priorities payload");
+
+    for (const item of priorities) {
+      await forumCategory.update(
+        { priority: item.priority },
+        { where: { id: item.id } }
+      );
+    }
+    return { success: true, message: "Category priorities updated" };
+  };
+
+  /* --- Save SubCategory Priorities --- */
+  public saveSubCategoryPriority = async (data: any): Promise<any> => {
+    const { priorities } = data;
+    if (!Array.isArray(priorities)) throw new Error("Invalid priorities payload");
+
+    for (const item of priorities) {
+      await forumSubCategory.update(
+        { priority: item.priority },
+        { where: { id: item.id } }
+      );
+    }
+    return { success: true, message: "SubCategory priorities updated" };
+  };
+
+
 
 
 

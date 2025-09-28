@@ -29,8 +29,13 @@ export const createDicsussionSchema = Joi.object({
 
 export const getThreadByIdSchema = Joi.object({
   subCategoryId: Joi.number().integer().required(),
-
+  filters: Joi.object({
+    locked: Joi.boolean().optional(),
+    isPinned: Joi.boolean().optional(),
+    sortBy: Joi.string().valid("newest", "oldest", "mostPopular").optional(),
+  }).optional()
 });
+
 
 export const deleteThreadSchema = Joi.object({
   userId: Joi.number().integer().required(),
@@ -207,4 +212,16 @@ export const updateThreadStatusSchema = Joi.object({
     .valid("lock", "unlock", "hide", "unhide", "pin", "unpin")
     .required(),
   adminId: Joi.number().integer().optional(), // only for lock/unlock
+});
+
+
+export const savePriorityValidator = Joi.object({
+  priorities: Joi.array()
+    .items(
+      Joi.object({
+        id: Joi.number().required(),
+        priority: Joi.number().required(),
+      })
+    )
+    .required(),
 });

@@ -18,6 +18,7 @@ export interface forumCategoryI {
   createdAt?: Date;
   updatedAt?: Date;
   deletedAt?: Date | null;
+  priority?: number;
 }
 
 @Table({
@@ -39,6 +40,13 @@ export class forumCategory extends Model<forumCategoryI> {
 
   @Column(DataType.STRING)
   public description: string;
+
+  @Column({
+    type: DataType.INTEGER,
+    defaultValue: 999,
+  })
+  public priority: number;
+
 
   @Column(DataType.STRING)
   public icon: string;
