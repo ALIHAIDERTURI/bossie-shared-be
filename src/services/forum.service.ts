@@ -1412,7 +1412,7 @@ export class ForumService {
         include: [
           {
             model: roleData,
-            attributes: ["firstName", "lastName", "roleId"],
+            attributes: ["firstName", "lastName"],
           },
         ],
         where: user
