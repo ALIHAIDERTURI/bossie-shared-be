@@ -165,7 +165,7 @@ export class ForumService {
     const forumData: any = await forumSubCategory.findAndCountAll({
       where: { categoryId: categoryId, deletedAt: null },
       attributes: {
-        exclude: ["deletedAt", "updatedAt", "description", "createdAt"],
+        exclude: ["deletedAt", "updatedAt", "createdAt"],
       },
       order: [["priority", "ASC"], ["id", "ASC"]],
     });
@@ -998,38 +998,153 @@ export class ForumService {
 
   public getReportedDiscussions = async (): Promise<any> => {
   const reports = await report.findAll({
+    where: { deletedAt: null },
     include: [
       {
         model: threads,
         as: "threads",
+        include: [
+          {
+            model: forumCategory,
+            as: "forumCategory",
+            attributes: ["id", "name", "icon"]
+          },
+          {
+            model: forumSubCategory,
+            as: "forumSubCategory", 
+            attributes: ["id", "name", "description"]
+          },
+          {
+            model: users,
+            as: "users",
+            attributes: ["id", "name", "email", "roleId"],
+            include: [
+              {
+                model: roleData,
+                as: "roleData",
+                attributes: ["firstName", "lastName", "profile", "companyName"]
+              }
+            ]
+          },
+          {
+            model: employee,
+            as: "employee",
+            attributes: ["id", "firstName", "lastName", "email", "profile"]
+          }
+        ]
       },
       {
         model: privateThreads,
         as: "privateThreads",
+        include: [
+          {
+            model: users,
+            as: "users",
+            attributes: ["id", "name", "email", "roleId"],
+            include: [
+              {
+                model: roleData,
+                as: "roleData",
+                attributes: ["firstName", "lastName", "profile", "companyName"]
+              }
+            ]
+          }
+        ]
       },
       {
         model: users,
         as: "reporterUser",
-        attributes: ["id", "name", "email", "roleId"],
+        attributes: ["id", "name", "email", "roleId", "phone"],
+        include: [
+          {
+            model: roleData,
+            as: "roleData",
+            attributes: ["firstName", "lastName", "profile", "companyName"]
+          }
+        ]
       },
     ],
     order: [["createdAt", "DESC"]],
   });
 
-  return reports.map((r: any) => ({
-    id: r.id,
-    problem: r.problem,
-    note: "Please view the detail page", // static note as per requirement
-    reportedThread: r.reportedThreadId ? r.threads : null,
-    reportedPrivateThread: r.reportedP_ThreadId ? r.privateThreads : null,
-    reporter: r.reporterUser ? {
-      id: r.reporterUser.id,
-      name: `${r.reporterUser.name}`,
-      email: r.reporterUser.email,
-      roleId: r.reporterUser.roleId
-    } : null,
-    createdAt: r.createdAt,
-  }));
+  return reports.map((r: any) => {
+    // Get the complete thread object with all details
+    let reportedThread = null;
+    if (r.reportedThreadId && r.threads) {
+      reportedThread = {
+        id: r.threads.id,
+        title: r.threads.title,
+        description: r.threads.description,
+        logo: r.threads.logo,
+        locked: r.threads.locked,
+        hidden: r.threads.hidden,
+        pinned: r.threads.pinned,
+        suggested: r.threads.suggested,
+        createdAt: r.threads.createdAt,
+        updatedAt: r.threads.updatedAt,
+        category: r.threads.forumCategory ? {
+          id: r.threads.forumCategory.id,
+          name: r.threads.forumCategory.name,
+          icon: r.threads.forumCategory.icon
+        } : null,
+        subCategory: r.threads.forumSubCategory ? {
+          id: r.threads.forumSubCategory.id,
+          name: r.threads.forumSubCategory.name,
+          description: r.threads.forumSubCategory.description
+        } : null,
+        owner: r.threads.users ? {
+          id: r.threads.users.id,
+          name: r.threads.users.name,
+          email: r.threads.users.email,
+          roleId: r.threads.users.roleId,
+          roleData: r.threads.users.roleData
+        } : r.threads.employee ? {
+          id: r.threads.employee.id,
+          name: `${r.threads.employee.firstName} ${r.threads.employee.lastName}`,
+          email: r.threads.employee.email,
+          roleId: 3,
+          profile: r.threads.employee.profile
+        } : null
+      };
+    }
+
+    // Get the complete private thread object with all details
+    let reportedPrivateThread = null;
+    if (r.reportedP_ThreadId && r.privateThreads) {
+      reportedPrivateThread = {
+        id: r.privateThreads.id,
+        title: r.privateThreads.title,
+        description: r.privateThreads.description,
+        createdAt: r.privateThreads.createdAt,
+        updatedAt: r.privateThreads.updatedAt,
+        owner: r.privateThreads.users ? {
+          id: r.privateThreads.users.id,
+          name: r.privateThreads.users.name,
+          email: r.privateThreads.users.email,
+          roleId: r.privateThreads.users.roleId,
+          roleData: r.privateThreads.users.roleData
+        } : null
+      };
+    }
+
+    return {
+      id: r.id,
+      problem: r.problem,
+      statusId: r.statusId,
+      note: "Please view the detail page",
+      reportedThread,
+      reportedPrivateThread,
+      reporter: r.reporterUser ? {
+        id: r.reporterUser.id,
+        name: r.reporterUser.name,
+        email: r.reporterUser.email,
+        phone: r.reporterUser.phone,
+        roleId: r.reporterUser.roleId,
+        roleData: r.reporterUser.roleData
+      } : null,
+      createdAt: r.createdAt,
+    };
+  });
 };
 
 
@@ -1126,21 +1241,52 @@ export class ForumService {
     throw new Error("Thread not found.");
   }
 
-  // Check if category exists
-  const category = await forumCategory.findByPk(categoryId);
-  if (!category) throw new Error("Category not found.");
+  // Check if category exists (only if categoryId is provided)
+  if (categoryId) {
+    const category = await forumCategory.findByPk(categoryId);
+    if (!category) throw new Error("Category not found.");
+  }
 
-  // Check if subcategory exists
-  const subCategory = await forumSubCategory.findOne({
-    where: { id: subCategoryId, categoryId }
-  });
-  if (!subCategory) throw new Error("Subcategory not found.");
+  // Check if subcategory exists (only if subCategoryId is provided)
+  if (subCategoryId && categoryId) {
+    const subCategory = await forumSubCategory.findOne({
+      where: { id: subCategoryId, categoryId }
+    });
+    if (!subCategory) throw new Error("Subcategory not found.");
+  }
 
-  // Update thread (logo included, if provided)
-  await thread.update(
-    { title, description, categoryId, subCategoryId, locked, ...(logo ? { logo } : {}) },
-    { transaction }
-  );
+  // Prepare update data
+  const updateData: any = {};
+  
+  // Add fields to update only if they are provided
+  if (title !== undefined) updateData.title = title;
+  if (description !== undefined) updateData.description = description;
+  if (categoryId !== undefined) updateData.categoryId = categoryId;
+  if (subCategoryId !== undefined) updateData.subCategoryId = subCategoryId;
+  if (locked !== undefined) updateData.locked = locked;
+  
+  // Handle logo update/addition
+  if (logo !== undefined) {
+    if (logo === null || logo === '') {
+      // Remove logo if null or empty string is provided
+      updateData.logo = null;
+    } else {
+      // Add or update logo
+      updateData.logo = logo;
+    }
+  }
+
+  // Update thread with only the provided fields
+  await thread.update(updateData, { transaction });
+
+  // Log thread editing action if adminId is provided
+  if (data.adminId) {
+    await threadLog.create({ 
+      threadId, 
+      isEdited: true, 
+      editedBy: data.adminId 
+    }, { transaction });
+  }
 
   // Fetch users who participated in messages
   const participantMessages = await messages.findAll({ where: { roomId: threadId } });
@@ -1163,10 +1309,22 @@ export class ForumService {
   // TODO: Log audit trail
   // Example: save into a "threadAuditTrail" table with threadId, action, reason, timestamp
 
+  // Get the updated thread to return current logo
+  const updatedThread = await threads.findByPk(threadId);
+  
   return {
     success: true,
     message: "Thread updated successfully",
-    data: { threadId, title, description, categoryId, subCategoryId, locked, reason, logo: logo ?? thread.logo }
+    data: { 
+      threadId, 
+      title: updatedThread?.title, 
+      description: updatedThread?.description, 
+      categoryId: updatedThread?.categoryId, 
+      subCategoryId: updatedThread?.subCategoryId, 
+      locked: updatedThread?.locked, 
+      reason, 
+      logo: updatedThread?.logo 
+    }
   };
 }
 
@@ -1254,7 +1412,7 @@ export class ForumService {
         include: [
           {
             model: roleData,
-            attributes: ["firstName", "lastName"],
+            attributes: ["firstName", "lastName", "roleId"],
           },
         ],
         where: user
@@ -1316,7 +1474,7 @@ export class ForumService {
           name: u.name,
           roleId: u.roleId ?? null,
           roleData: {
-            roleId: u.roleId ?? null,
+            roleId: u.roleData?.roleId ?? u.roleId ?? null,
             firstName: u.roleData?.firstName ?? null,
             lastName: u.roleData?.lastName ?? null,
           },
@@ -1329,7 +1487,7 @@ export class ForumService {
           name: u.name,
           roleId: u.roleId ?? null,
           roleData: {
-            roleId: u.roleId ?? null,
+            roleId: u.roleData?.roleId ?? u.roleId ?? null,
             firstName: u.roleData?.firstName ?? null,
             lastName: u.roleData?.lastName ?? null,
           },
@@ -1488,6 +1646,7 @@ public updateThreadStatus = async (
         return { success: false, message: "Thread is already hidden", thread };
       thread.hidden = true;
       await thread.save();
+      await threadLog.create({ threadId, isHidden: true, hiddenBy: adminId ?? undefined });
       return { success: true, message: "Thread hidden successfully", thread };
 
     case "unhide":
@@ -1495,6 +1654,7 @@ public updateThreadStatus = async (
         return { success: false, message: "Thread is already visible", thread };
       thread.hidden = false;
       await thread.save();
+      await threadLog.create({ threadId, isHidden: false, hiddenBy: adminId ?? undefined });
       return { success: true, message: "Thread unhidden successfully", thread };
 
     case "pin":
@@ -1502,6 +1662,7 @@ public updateThreadStatus = async (
         return { success: false, message: "Thread is already pinned", thread };
       thread.pinned = true;
       await thread.save();
+      await threadLog.create({ threadId, isPinned: true, pinnedBy: adminId ?? undefined });
       return { success: true, message: "Thread pinned successfully", thread };
 
     case "unpin":
@@ -1509,6 +1670,7 @@ public updateThreadStatus = async (
         return { success: false, message: "Thread is already unpinned", thread };
       thread.pinned = false;
       await thread.save();
+      await threadLog.create({ threadId, isPinned: false, pinnedBy: adminId ?? undefined });
       return { success: true, message: "Thread unpinned successfully", thread };
 
     default:

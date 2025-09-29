@@ -4643,7 +4643,7 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
         const ad = adminById.get(log.lockedBy);
         actor = ad ? { id: ad.id, roleId: ad.adminRoleId, name: ad.name, source: "admin" } : { source: "admin" };
       } else {
-        action = "Thread locked by user";
+        action = "Thread locked by user (WebSocket action: lockRoom)";
         actor = { source: "user" };
       }
     }
@@ -4655,7 +4655,7 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
         const ad = adminById.get(log.unLockedBy);
         actor = ad ? { id: ad.id, roleId: ad.adminRoleId, name: ad.name, source: "admin" } : { source: "admin" };
       } else {
-        action = "Thread unlocked by user";
+        action = "Thread unlocked by user (WebSocket action: unLockRoom)";
         actor = { source: "user" };
       }
     }

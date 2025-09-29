@@ -171,7 +171,8 @@ export const editThreadValidator = Joi.object({
   subCategoryId: Joi.number().optional(),
   locked: Joi.boolean().optional(),
   reason: Joi.string().min(5).max(255).optional(),
-  logo: Joi.string().min(3).max(255).optional()
+  logo: Joi.string().uri().allow('').optional(), // Allow empty string to remove logo, validate as URI for valid URLs
+  adminId: Joi.number().integer().optional() // Admin ID for logging purposes
 });
 
 
