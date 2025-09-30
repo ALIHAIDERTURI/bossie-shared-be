@@ -511,12 +511,15 @@ public getAllDiscussions = async (req: Request, res: Response) => {
 
   public fetchThreads = async (req: Request, res: Response) => {
   try {
-    const data = await this.__service.fetchThreads(req.query);
-    res.status(200).json({ success: true, data });
+    const result = await this.__service.fetchThreads(req.query);
+
+    return res.status(200).json(result); // ✅ direct bhej de
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
+
+
 
 
 
