@@ -1452,7 +1452,7 @@ export class ForumService {
       where: whereClause,
       include: includeClause,
       attributes: {
-        exclude: ["suggested", "hidden"],
+        exclude: ["suggested"],
       },
       limit,
       offset,
@@ -1464,7 +1464,7 @@ export class ForumService {
 
       // cleanup
       if ("suggested" in plain) delete plain.suggested;
-      if ("hidden" in plain) delete plain.hidden;
+      // if ("hidden" in plain) delete plain.hidden;
 
       // normalize users
       if (plain.user) {
