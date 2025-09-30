@@ -1451,9 +1451,9 @@ export class ForumService {
     const { count, rows } = await threads.findAndCountAll({
       where: whereClause,
       include: includeClause,
-      attributes: {
-        exclude: ["suggested"],
-      },
+      // attributes: {
+      //   exclude: ["suggested"],
+      // },
       limit,
       offset,
       order: [["createdAt", "desc"]],
@@ -1463,7 +1463,7 @@ export class ForumService {
       const plain = r.get ? r.get({ plain: true }) : r;
 
       // cleanup
-      if ("suggested" in plain) delete plain.suggested;
+      // if ("suggested" in plain) delete plain.suggested;
       // if ("hidden" in plain) delete plain.hidden;
 
       // normalize users
