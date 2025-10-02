@@ -94,52 +94,54 @@ export class AdminService {
   };
 
   public verifyAdminLoginOtp = async (data: any): Promise<any> => {
-    const { email, OTP } = data;
-    const secret = process.env.SECRET_KEY as string;
+  const { email, OTP } = data;
+  const secret = process.env.SECRET_KEY as string;
 
-    const isAdmin: any = await admin.findOne({ where: { email } });
-    if (!isAdmin) throw new Error("E-mailadres bestaat niet.");
+  const isAdmin: any = await admin.findOne({ where: { email } });
+  if (!isAdmin) throw new Error("E-mailadres bestaat niet.");
 
-    const suspension = await adminLog.findOne({
-      where: {
-        adminId: isAdmin.id,
-        isSuspend: true,
-      },
-      order: [["id", "desc"]],
-    });
+  const suspension = await adminLog.findOne({
+    where: {
+      adminId: isAdmin.id,
+      isSuspend: true,
+    },
+    order: [["id", "desc"]],
+  });
 
-    if (suspension) {
-      if (!suspension.suspendUntil || suspension.suspendUntil > new Date()) {
-        throw new Error("Uw account is geschorst. Neem contact op met de beheerder.");
-      }
+  if (suspension) {
+    if (!suspension.suspendUntil || suspension.suspendUntil > new Date()) {
+      throw new Error("Uw account is geschorst. Neem contact op met de beheerder.");
     }
+  }
 
-    const now = new Date().getTime();
-    const otpTime = new Date(isAdmin.loginOtpCreatedAt).getTime();
+  const now = new Date().getTime();
+  const otpTime = new Date(isAdmin.loginOtpCreatedAt).getTime();
 
-    if (
-      isAdmin.loginOTP !== Number(OTP) ||
-      isAdmin.loginOtpUsed ||
-      (now - otpTime) / 60000 > 5
-    ) {
-      throw new Error("OTP ongeldig of verlopen.");
-    }
+  if (
+    isAdmin.loginOTP !== Number(OTP) ||
+    isAdmin.loginOtpUsed ||
+    (now - otpTime) / 60000 > 5
+  ) {
+    throw new Error("OTP ongeldig of verlopen.");
+  }
 
-    await admin.update({ loginOtpUsed: true }, { where: { id: isAdmin.id } });
+  await admin.update({ loginOtpUsed: true }, { where: { id: isAdmin.id } });
 
-    const token = jwt.sign(
-      { id: isAdmin.id, roleId: isAdmin.adminRoleId, isAdmin: true },
-      secret,
-      { expiresIn: "1d" }
-    );
+  const token = jwt.sign(
+    { id: isAdmin.id, roleId: isAdmin.adminRoleId, isAdmin: true },
+    secret,
+    { expiresIn: "1d" }
+  );
 
-    return {
-      id: isAdmin.id,
-      email: isAdmin.email,
-      adminRoleId: isAdmin.adminRoleId,
-      token,
-    };
+  return {
+    id: isAdmin.id,
+    name: isAdmin.name,       // ✅ Added admin's name here
+    email: isAdmin.email,
+    adminRoleId: isAdmin.adminRoleId,
+    token,
   };
+};
+
 
   public forgetPassword = async (data: any): Promise<any> => {
     const { email } = data;
@@ -4811,7 +4813,7 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
         {
           as: "users",
           model: users,
-          attributes: ["name"],
+          attributes: ["id","name","roleId"],
           include: [
             {
               as: "roleData",
@@ -4833,7 +4835,7 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
             {
               as: "users",
               model: users,
-              attributes: ["name"],
+              attributes: ["name","roleId"],
               include: [
                 {
                   as: "roleData",
@@ -7526,110 +7528,113 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
     };
   };
 
-  public getCompanyThreads = async (data: any): Promise<any> => {
-    const { companyId, limit = 10, offset = 0 } = data;
+  public getCompanyThreads = async (data: { companyId: number, limit?: number, offset?: number }): Promise<any> => {
+  const { companyId, limit = 10, offset = 0 } = data;
 
-    // Check if company exists
-    const companyExists = await users.findOne({
-      where: { id: companyId, roleId: 2, deletedAt: null }
-    });
-    if (!companyExists) {
-      throw new Error("Company not found");
-    }
+  // Check if company exists
+  const companyExists = await users.findOne({
+    where: { id: companyId, roleId: 2, deletedAt: null }
+  });
+  if (!companyExists) {
+    throw new Error("Company not found");
+  }
 
-    // Get threads where company is the owner
-    const ownedThreads = await threads.findAll({
-      where: {
-        ownerId: companyId,
-        deletedAt: null
+  // Get threads where company is the owner
+  const ownedThreads = await threads.findAll({
+    where: {
+      ownerId: companyId,
+      deletedAt: null
+    },
+    attributes: [
+      "id",
+      "title",
+      "description",
+      "categoryId",
+      "subCategoryId",
+      "locked",
+      "createdAt",
+      "updatedAt"
+    ],
+    include: [
+      {
+        model: forumCategory,
+        as: "forumCategory",
+        attributes: ["name"],
+        required: false
       },
-      attributes: [
-        "id",
-        "title",
-        "description",
-        "categoryId",
-        "subCategoryId",
-        "locked",
-        "createdAt",
-        "updatedAt"
-      ],
-      include: [
-        {
-          model: forumCategory,
-          as: "forumCategory",
-          attributes: ["name"],
-          required: false
-        },
-        {
-          model: forumSubCategory,
-          as: "forumSubCategory",
-          attributes: ["name"],
-          required: false
-        }
-      ],
-      order: [["createdAt", "DESC"]]
-    });
+      {
+        model: forumSubCategory,
+        as: "forumSubCategory",
+        attributes: ["name"],
+        required: false
+      }
+    ],
+    order: [["createdAt", "DESC"]]
+  });
 
-    // Get threads where company has sent messages
-    const participatedThreads = await threads.findAll({
-      where: {
-        id: {
-          [Op.in]: Sequelize.literal(`(
-            SELECT DISTINCT roomId 
-            FROM messages 
-            WHERE userId = ${companyId} 
-            AND deletedAt IS NULL
-          )`)
-        },
-        deletedAt: null
+  // Get threads where company has sent messages
+  const participatedThreads = await threads.findAll({
+    where: {
+      id: {
+        [Op.in]: Sequelize.literal(`(
+          SELECT DISTINCT roomId 
+          FROM messages 
+          WHERE userId = ${companyId} 
+          AND deletedAt IS NULL
+        )`)
       },
-      attributes: [
-        "id",
-        "title",
-        "description",
-        "categoryId",
-        "subCategoryId",
-        "locked",
-        "createdAt",
-        "updatedAt"
-      ],
-      include: [
-        {
-          model: forumCategory,
-          as: "forumCategory",
-          attributes: ["name"],
-          required: false
-        },
-        {
-          model: forumSubCategory,
-          as: "forumSubCategory",
-          attributes: ["name"],
-          required: false
-        }
-      ],
-      order: [["createdAt", "DESC"]]
-    });
+      deletedAt: null
+    },
+    attributes: [
+      "id",
+      "title",
+      "description",
+      "categoryId",
+      "subCategoryId",
+      "locked",
+      "createdAt",
+      "updatedAt"
+    ],
+    include: [
+      {
+        model: forumCategory,
+        as: "forumCategory",
+        attributes: ["name"],
+        required: false
+      },
+      {
+        model: forumSubCategory,
+        as: "forumSubCategory",
+        attributes: ["name"],
+        required: false
+      }
+    ],
+    order: [["createdAt", "DESC"]]
+  });
 
-    const allThreads = [...ownedThreads, ...participatedThreads];
-    const uniqueThreads = allThreads.filter((thread, index, self) =>
-      index === self.findIndex(t => t.id === thread.id)
-    );
-    const paginatedThreads = uniqueThreads.slice(offset * limit, (offset + 1) * limit);
-    const formattedThreads = paginatedThreads.map((thread: any) => ({
-      threadId: thread.id,
-      threadName: thread.title,
-      threadPath: thread.forumCategory?.name && thread.forumSubCategory?.name
-        ? `${thread.forumCategory.name} > ${thread.forumSubCategory.name}`
-        : thread.forumCategory?.name || thread.forumSubCategory?.name || null
-    }));
+  const allThreads = [...ownedThreads, ...participatedThreads];
+  const uniqueThreads = allThreads.filter((thread, index, self) =>
+    index === self.findIndex(t => t.id === thread.id)
+  );
 
-    return {
-      threads: formattedThreads,
-      total: uniqueThreads.length,
-      limit: limit,
-      offset: offset
-    };
+  const paginatedThreads = uniqueThreads.slice(offset * limit, (offset + 1) * limit);
+
+  const formattedThreads = paginatedThreads.map(thread => ({
+    threadId: thread.id,
+    threadName: thread.title,
+    threadPath: thread.forumCategory?.name && thread.forumSubCategory?.name
+      ? `${thread.forumCategory.name} > ${thread.forumSubCategory.name}`
+      : thread.forumCategory?.name || thread.forumSubCategory?.name || null
+  }));
+
+  return {
+    threads: formattedThreads,
+    total: uniqueThreads.length,
+    limit,
+    offset
   };
+};
+
 
   public approveRejectUser = async (data: any): Promise<any> => {
     const { userId, status, adminId, rejectionReason, customLog } = data;
