@@ -94,52 +94,54 @@ export class AdminService {
   };
 
   public verifyAdminLoginOtp = async (data: any): Promise<any> => {
-    const { email, OTP } = data;
-    const secret = process.env.SECRET_KEY as string;
+  const { email, OTP } = data;
+  const secret = process.env.SECRET_KEY as string;
 
-    const isAdmin: any = await admin.findOne({ where: { email } });
-    if (!isAdmin) throw new Error("E-mailadres bestaat niet.");
+  const isAdmin: any = await admin.findOne({ where: { email } });
+  if (!isAdmin) throw new Error("E-mailadres bestaat niet.");
 
-    const suspension = await adminLog.findOne({
-      where: {
-        adminId: isAdmin.id,
-        isSuspend: true,
-      },
-      order: [["id", "desc"]],
-    });
+  const suspension = await adminLog.findOne({
+    where: {
+      adminId: isAdmin.id,
+      isSuspend: true,
+    },
+    order: [["id", "desc"]],
+  });
 
-    if (suspension) {
-      if (!suspension.suspendUntil || suspension.suspendUntil > new Date()) {
-        throw new Error("Uw account is geschorst. Neem contact op met de beheerder.");
-      }
+  if (suspension) {
+    if (!suspension.suspendUntil || suspension.suspendUntil > new Date()) {
+      throw new Error("Uw account is geschorst. Neem contact op met de beheerder.");
     }
+  }
 
-    const now = new Date().getTime();
-    const otpTime = new Date(isAdmin.loginOtpCreatedAt).getTime();
+  const now = new Date().getTime();
+  const otpTime = new Date(isAdmin.loginOtpCreatedAt).getTime();
 
-    if (
-      isAdmin.loginOTP !== Number(OTP) ||
-      isAdmin.loginOtpUsed ||
-      (now - otpTime) / 60000 > 5
-    ) {
-      throw new Error("OTP ongeldig of verlopen.");
-    }
+  if (
+    isAdmin.loginOTP !== Number(OTP) ||
+    isAdmin.loginOtpUsed ||
+    (now - otpTime) / 60000 > 5
+  ) {
+    throw new Error("OTP ongeldig of verlopen.");
+  }
 
-    await admin.update({ loginOtpUsed: true }, { where: { id: isAdmin.id } });
+  await admin.update({ loginOtpUsed: true }, { where: { id: isAdmin.id } });
 
-    const token = jwt.sign(
-      { id: isAdmin.id, roleId: isAdmin.adminRoleId, isAdmin: true },
-      secret,
-      { expiresIn: "1d" }
-    );
+  const token = jwt.sign(
+    { id: isAdmin.id, roleId: isAdmin.adminRoleId, isAdmin: true },
+    secret,
+    { expiresIn: "1d" }
+  );
 
-    return {
-      id: isAdmin.id,
-      email: isAdmin.email,
-      adminRoleId: isAdmin.adminRoleId,
-      token,
-    };
+  return {
+    id: isAdmin.id,
+    name: isAdmin.name,       // ✅ Added admin's name here
+    email: isAdmin.email,
+    adminRoleId: isAdmin.adminRoleId,
+    token,
   };
+};
+
 
   public forgetPassword = async (data: any): Promise<any> => {
     const { email } = data;
