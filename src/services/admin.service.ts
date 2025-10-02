@@ -7421,110 +7421,139 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
     };
   };
 
-  public getUserThreads = async (data: any): Promise<any> => {
-    const { userId, limit = 10, offset = 0 } = data;
 
-    // Check if user exists
-    const userExists = await users.findOne({
-      where: { id: userId, deletedAt: null }
-    });
-    if (!userExists) {
-      throw new Error("User not found");
-    }
 
-    // Get threads where user is the owner
-    const ownedThreads = await threads.findAll({
-      where: {
-        ownerId: userId,
-        deletedAt: null
+public getUserThreads = async (data: any): Promise<any> => {
+  const { userId, limit = 10, offset = 0 } = data;
+
+  // 1. Verify user exists
+  const userExists = await users.findOne({
+    where: { id: userId, deletedAt: null },
+    attributes: ["id"],
+  });
+  if (!userExists) {
+    throw new Error("User not found");
+  }
+
+  // 2. Check if this user has an employee record
+  const employeeRecord = await employee.findOne({
+    where: { userId, deletedAt: null },
+    attributes: ["id"],
+  });
+  const empId = employeeRecord ? employeeRecord.id : null;
+
+  // 3. Threads owned by this user (via userId or empId)
+  const ownedThreads = await threads.findAll({
+    where: {
+      deletedAt: null,
+      [Op.or]: [
+        { ownerId: userId },
+        empId ? { ownerEmpId: empId } : {}, // only include if employee exists
+      ],
+    },
+    attributes: [
+      "id",
+      "title",
+      "description",
+      "categoryId",
+      "subCategoryId",
+      "locked",
+      "createdAt",
+      "updatedAt",
+    ],
+    include: [
+      {
+        model: forumCategory,
+        as: "forumCategory",
+        attributes: ["name"],
+        required: false,
       },
-      attributes: [
-        "id",
-        "title",
-        "description",
-        "categoryId",
-        "subCategoryId",
-        "locked",
-        "createdAt",
-        "updatedAt"
-      ],
-      include: [
-        {
-          model: forumCategory,
-          as: "forumCategory",
-          attributes: ["name"],
-          required: false
-        },
-        {
-          model: forumSubCategory,
-          as: "forumSubCategory",
-          attributes: ["name"],
-          required: false
-        }
-      ],
-      order: [["createdAt", "DESC"]]
-    });
+      {
+        model: forumSubCategory,
+        as: "forumSubCategory",
+        attributes: ["name"],
+        required: false,
+      },
+    ],
+    order: [["createdAt", "DESC"]],
+  });
 
-    // Get threads where user has sent messages
-    const participatedThreads = await threads.findAll({
-      where: {
-        id: {
-          [Op.in]: Sequelize.literal(`(
-            SELECT DISTINCT roomId 
-            FROM messages 
-            WHERE userId = ${userId} 
+  // 4. Threads where user/employee participated (via messages)
+  const participatedThreads = await threads.findAll({
+    where: {
+      id: {
+        [Op.in]: Sequelize.literal(`(
+          SELECT DISTINCT roomId
+          FROM messages
+          WHERE (userId = ${userId} ${empId ? `OR empId = ${empId}` : ""})
             AND deletedAt IS NULL
-          )`)
-        },
-        deletedAt: null
+        )`),
       },
-      attributes: [
-        "id",
-        "title",
-        "description",
-        "categoryId",
-        "subCategoryId",
-        "locked",
-        "createdAt",
-        "updatedAt"
-      ],
-      include: [
-        {
-          model: forumCategory,
-          as: "forumCategory",
-          attributes: ["name"],
-          required: false
-        },
-        {
-          model: forumSubCategory,
-          as: "forumSubCategory",
-          attributes: ["name"],
-          required: false
-        }
-      ],
-      order: [["createdAt", "DESC"]]
-    });
+      deletedAt: null,
+    },
+    attributes: [
+      "id",
+      "title",
+      "description",
+      "categoryId",
+      "subCategoryId",
+      "locked",
+      "createdAt",
+      "updatedAt",
+    ],
+    include: [
+      {
+        model: forumCategory,
+        as: "forumCategory",
+        attributes: ["name"],
+        required: false,
+      },
+      {
+        model: forumSubCategory,
+        as: "forumSubCategory",
+        attributes: ["name"],
+        required: false,
+      },
+    ],
+    order: [["createdAt", "DESC"]],
+  });
 
-    const allThreads = [...ownedThreads, ...participatedThreads];
-    const uniqueThreads = allThreads.filter((thread, index, self) =>
-      index === self.findIndex(t => t.id === thread.id)
-    );
-    const paginatedThreads = uniqueThreads.slice(offset * limit, (offset + 1) * limit);
-    const formattedThreads = paginatedThreads.map((thread: any) => ({
-      threadId: thread.id,
-      threadName: thread.title,
-      threadPath: thread.forumCategory?.name && thread.forumSubCategory?.name
+  // 5. Merge, remove duplicates
+  const allThreads = [...ownedThreads, ...participatedThreads];
+  const uniqueThreads = allThreads.filter(
+    (thread, index, self) =>
+      index === self.findIndex((t) => t.id === thread.id)
+  );
+
+  // 6. Apply pagination
+  const paginatedThreads = uniqueThreads.slice(
+    offset * limit,
+    (offset + 1) * limit
+  );
+
+  // 7. Format response
+  const formattedThreads = paginatedThreads.map((thread: any) => ({
+    threadId: thread.id,
+    threadName: thread.title,
+    threadPath:
+      thread.forumCategory?.name && thread.forumSubCategory?.name
         ? `${thread.forumCategory.name} > ${thread.forumSubCategory.name}`
-        : thread.forumCategory?.name || thread.forumSubCategory?.name || null
-    }));
+        : thread.forumCategory?.name ||
+          thread.forumSubCategory?.name ||
+          null,
+  }));
 
-    return {
-      threads: formattedThreads,
-      total: uniqueThreads.length,
-      limit: limit,
-      offset: offset
-    };
+  // 8. Final response
+  return {
+    threads: formattedThreads,
+    total: uniqueThreads.length,
+    limit: limit,
+    offset: offset,
   };
+};
+
+
+
 
   public getCompanyThreads = async (data: any): Promise<any> => {
     const { companyId, limit = 10, offset = 0 } = data;
