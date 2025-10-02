@@ -286,20 +286,21 @@ export class ForumService {
   public getThreadById = async (data: any): Promise<any> => {
   const { filters, subCategoryId } = data;
 
-  let orderClause: any = [];
-  let whereClause: any = {};
+  const whereClause: any = {
+    subCategoryId,
+    hidden: 0, // 👈 hidden threads ignore
+  };
 
-  // filter by locked
-  if (filters?.locked === true || filters?.locked === false) {
+  let orderClause: any[] = [];
+
+  if (typeof filters?.locked === "boolean") {
     whereClause.locked = filters.locked;
   }
 
-  // 🔹 filter by pinned
-  if (filters?.isPinned === true || filters?.isPinned === false) {
+  if (typeof filters?.isPinned === "boolean") {
     whereClause.pinned = filters.isPinned;
   }
 
-  // sorting
   switch (filters?.sortBy) {
     case "newest":
       orderClause = [["createdAt", "desc"]];
@@ -319,12 +320,11 @@ export class ForumService {
       break;
     default:
       orderClause = [["createdAt", "desc"]];
-      break;
   }
 
-  const allThreads: any = await threads.findAndCountAll({
-    where: { subCategoryId, ...whereClause },
-    order: orderClause.length ? orderClause : undefined,
+  const allThreads = await threads.findAndCountAll({
+    where: whereClause,
+    order: orderClause,
     attributes: { exclude: ["deletedAt", "updatedAt"] },
     include: [
       {
@@ -376,8 +376,10 @@ export class ForumService {
       },
     ],
   });
+
   return allThreads;
 };
+
 
 
   public deleteThread = async (
@@ -1421,7 +1423,7 @@ public async fetchThreads(query: any) {
       include: [
         {
           model: roleData,
-          attributes: ["firstName", "lastName"],
+          attributes: ["firstName", "lastName","companyName"],
         },
       ],
       required: false,
@@ -1454,6 +1456,7 @@ public async fetchThreads(query: any) {
             roleId: plain.users.roleData?.roleId ?? null,
             firstName: plain.users.roleData?.firstName ?? null,
             lastName: plain.users.roleData?.lastName ?? null,
+            companyName: plain.users.roleData?.companyName ?? null,
           },
         }
       : null;

@@ -4811,7 +4811,7 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
         {
           as: "users",
           model: users,
-          attributes: ["name"],
+          attributes: ["id","name","roleId"],
           include: [
             {
               as: "roleData",
@@ -4833,7 +4833,7 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
             {
               as: "users",
               model: users,
-              attributes: ["name"],
+              attributes: ["name","roleId"],
               include: [
                 {
                   as: "roleData",
