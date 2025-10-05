@@ -11,7 +11,6 @@ import {
 import { privateThreads } from "./privateThreads";
 import { threads } from "./threads";
 import { users } from "./users"; 
-import { employee } from "./employee";
 
 export interface reportI {
   id?: number;
@@ -42,10 +41,6 @@ export class report extends Model<reportI> {
 
   @BelongsTo((): typeof users => users, { foreignKey: "userId", as: "reporterUser" })
   public reporterUser: typeof users;
-
-  @BelongsTo(() => employee, { foreignKey: "userId", as: "reporterEmployee" })
-  public reporterEmployee: typeof employee;
-
 
 
   @PrimaryKey
