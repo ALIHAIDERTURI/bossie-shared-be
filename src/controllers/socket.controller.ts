@@ -164,4 +164,52 @@ export class SocketController {
       socket.emit("leavePrivateRoomError", error.message);
     }
   };
+
+  public hideMessage = async (socket: any, io: any, data: any) => {
+    try {
+      const transaction = await sequelize.transaction();
+      try {
+        const response: any = await this.__service.hideMessage(
+          socket,
+          io,
+          data,
+          transaction
+        );
+        await transaction.commit();
+        socket.emit("hideMessageSuccess", response);
+      } catch (error: any) {
+        if (transaction) {
+          transaction.rollback();
+        }
+        socket.emit("hideMessageError", error.message);
+      }
+    } catch (error: any) {
+      console.log(error);
+      socket.emit("hideMessageError", "An unexpected error occurred");
+    }
+  };
+
+  public deleteMessage = async (socket: any, io: any, data: any) => {
+    try {
+      const transaction = await sequelize.transaction();
+      try {
+        const response: any = await this.__service.deleteMessage(
+          socket,
+          io,
+          data,
+          transaction
+        );
+        await transaction.commit();
+        socket.emit("deleteMessageSuccess", response);
+      } catch (error: any) {
+        if (transaction) {
+          transaction.rollback();
+        }
+        socket.emit("deleteMessageError", error.message);
+      }
+    } catch (error: any) {
+      console.log(error);
+      socket.emit("deleteMessageError", "An unexpected error occurred");
+    }
+  };
 }

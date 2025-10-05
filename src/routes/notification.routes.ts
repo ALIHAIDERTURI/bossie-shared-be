@@ -26,3 +26,20 @@ notificationRouter.get("/viewPreviousNotification", (...args: [Request, Response
 notificationRouter.get("/getNotificationById", (...args: [Request, Response]) =>
   notificationController.getNotificationById(...args)
 );
+
+// New endpoints for notification management UI
+notificationRouter.get("/getNotificationHistory", (...args: [Request, Response]) =>
+  notificationController.getNotificationHistory(...args)
+);
+
+notificationRouter.get("/searchNotifications", (...args: [Request, Response]) =>
+  notificationController.searchNotifications(...args)
+);
+
+notificationRouter.post("/resendNotification", (...args: [Request, Response]) =>
+  notificationController.resendNotification(...args)
+);
+
+notificationRouter.get("/getNotificationDetails", (...args: [Request, Response]) =>
+  notificationController.getNotificationDetails(...args)
+);

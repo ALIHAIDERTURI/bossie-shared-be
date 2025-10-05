@@ -22,7 +22,10 @@ export class SocketService {
       throw new Error("Er is geen kamer beschikbaar.");
     }
     const allMessage: any = await messages.findAll({
-      where: { roomId: id },
+      where: { 
+        roomId: id,
+        isDeleted: false // Exclude deleted messages
+      },
       order: [["createdAt", "desc"]],
       include: [
         {
@@ -104,6 +107,8 @@ export class SocketService {
           message: msg.message,
           img: msg.img,
           timeStamp: msg.createdAt,
+          isHidden: msg.isHidden || false,
+          isDeleted: msg.isDeleted || false,
         };
       })
     );
@@ -162,21 +167,23 @@ export class SocketService {
 
 
 
-        io.to(roomId).emit("message", {
-          messageId: messageCreate.id,
-          userId,
-          roleId: roleId,
-          name:
-            roleId == 2
-              ? `${userResponse?.roleData?.companyName}`
-              : `${userResponse?.roleData?.firstName} ${userResponse?.roleData?.lastName}`,
-          userLogo: userResponse?.roleData?.profile,
-          roomId,
-          roomName: roomExist.title,
-          message,
-          img,
-          timeStamp: messageCreate.createdAt,
-        });
+         io.to(roomId).emit("message", {
+           messageId: messageCreate.id,
+           userId,
+           roleId: roleId,
+           name:
+             roleId == 2
+               ? `${userResponse?.roleData?.companyName}`
+               : `${userResponse?.roleData?.firstName} ${userResponse?.roleData?.lastName}`,
+           userLogo: userResponse?.roleData?.profile,
+           roomId,
+           roomName: roomExist.title,
+           message,
+           img,
+           timeStamp: messageCreate.createdAt,
+           isHidden: false,
+           isDeleted: false,
+         });
       } else {
         console.log("in send msg , emp condition");
 
@@ -192,23 +199,83 @@ export class SocketService {
           throw new Error("Het is niet toegestaan ​​om berichten te versturen.")
         }
 
-        io.to(roomId).emit("message", {
-          messageId: messageCreate.id,
-          userId,
-          roleId: roleId,
-          name: `${userResponse.firstName} ${userResponse.lastName}`,
-          userLogo: userResponse.profile,
-          roomId,
-          roomName: roomExist.title,
-          message,
-          img,
-          timeStamp: messageCreate.createdAt,
-        });
+         io.to(roomId).emit("message", {
+           messageId: messageCreate.id,
+           userId,
+           roleId: roleId,
+           name: `${userResponse.firstName} ${userResponse.lastName}`,
+           userLogo: userResponse.profile,
+           roomId,
+           roomName: roomExist.title,
+           message,
+           img,
+           timeStamp: messageCreate.createdAt,
+           isHidden: false,
+           isDeleted: false,
+         });
       }
 
       return;
     }
     throw new Error("Kamer is afgesloten.");
+  };
+
+  public hideMessage = async (
+    socket: any,
+    io: any,
+    data: any,
+    transaction: Transaction
+  ): Promise<any> => {
+    const { messageId, adminId } = data;
+
+    const message = await messages.findOne({
+      where: { id: messageId, isDeleted: false }
+    });
+
+    if (!message) {
+      throw new Error("Message not found");
+    }
+
+    await message.update(
+      { isHidden: true, hiddenBy: adminId },
+      { transaction }
+    );
+
+    io.to(message.roomId.toString()).emit("messageHidden", {
+      messageId: messageId,
+      hiddenBy: adminId,
+    });
+
+    return { success: true, message: "Message hidden successfully" };
+  };
+
+  public deleteMessage = async (
+    socket: any,
+    io: any,
+    data: any,
+    transaction: Transaction
+  ): Promise<any> => {
+    const { messageId, adminId } = data;
+
+    const message = await messages.findOne({
+      where: { id: messageId, isDeleted: false }
+    });
+
+    if (!message) {
+      throw new Error("Message not found");
+    }
+
+    await message.update(
+      { isDeleted: true, deletedBy: adminId },
+      { transaction }
+    );
+
+    io.to(message.roomId.toString()).emit("messageDeleted", {
+      messageId: messageId,
+      deletedBy: adminId,
+    });
+
+    return { success: true, message: "Message deleted successfully" };
   };
 
   public leaveRoom = async (io: any, socket: any, data: any): Promise<any> => {

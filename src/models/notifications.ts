@@ -36,13 +36,13 @@ export interface notificationsI {
   timestamps: true,
 })
 export class notifications extends Model<notificationsI> {
-  @BelongsTo((): typeof users => users)
+  @BelongsTo((): typeof users => users, { foreignKey: 'userId' })
   public users: typeof users;
 
-  @BelongsTo((): typeof employee => employee)
+  @BelongsTo((): typeof employee => employee, { foreignKey: 'employeeId' })
   public employee: typeof employee;
 
-  @BelongsTo((): typeof report => report)
+  @BelongsTo((): typeof report => report, { foreignKey: 'reportId' })
   public report: typeof report;
 
   @PrimaryKey
@@ -50,15 +50,12 @@ export class notifications extends Model<notificationsI> {
   @Column(DataType.INTEGER)
   public id: number;
 
-  @ForeignKey((): typeof users => users)
   @Column(DataType.INTEGER)
   public userId: Number;
 
-  @ForeignKey((): typeof employee => employee)
   @Column(DataType.INTEGER)
   public employeeId: Number;
 
-  @ForeignKey((): typeof report => report)
   @Column(DataType.INTEGER)
   public reportId: Number;
 

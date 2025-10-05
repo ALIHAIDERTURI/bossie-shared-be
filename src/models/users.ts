@@ -58,7 +58,7 @@ export interface userI {
   timestamps: true,
 })
 export class users extends Model<userI> {
-  @HasMany((): typeof notifications => notifications)
+  @HasMany((): typeof notifications => notifications, { foreignKey: 'userId' })
   public notifications: typeof notifications;
 
   @HasMany((): typeof userLog => userLog)
@@ -82,8 +82,8 @@ export class users extends Model<userI> {
   @HasOne((): typeof roleData => roleData)
   public roleData: typeof roleData;
 
-  @BelongsTo((): typeof admin => admin)
-  public admin: typeof admin;
+  // @BelongsTo((): typeof admin => admin)
+  // public admin: typeof admin;
 
 // 👇 NEW RELATION
   @HasMany(() => toxicityScores, { as: "toxicityScores" })

@@ -147,8 +147,8 @@ export class ForumController {
     try {
       let message = "Thread fetched successfully.";
       const { body } = req;
-      // const data = await getThreadByIdSchema.validateAsync(body);
-      const response: any = await this.__service.getThreadById(body);
+      const data = await getThreadByIdSchema.validateAsync(body);
+      const response: any = await this.__service.getThreadById(data);
 
       res.status(200).json({
         statusCode: 200,

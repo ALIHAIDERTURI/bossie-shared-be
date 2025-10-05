@@ -9,3 +9,4 @@ dist/
 package-lock.json
 ec2-guide.md
 *.zip
+NOTIFICATION_POSTMAN_GUIDE.txt

@@ -194,7 +194,7 @@ export const addCustomModeratorLogSchema = Joi.object({
 
 export const addCustomUserLogSchema = Joi.object({
   userId: Joi.number().integer().required(),
-  roleId: Joi.number().integer().valid(1, 2, 3).required(),
+  roleId: Joi.number().integer().valid(1, 2, 3, 4, 5).required(),
   activity: Joi.string().required(),
   adminId: Joi.number().integer().required()
 });

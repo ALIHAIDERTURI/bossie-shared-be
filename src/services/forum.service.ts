@@ -1063,13 +1063,14 @@ export class ForumService {
             as: "roleData",
             attributes: ["firstName", "lastName", "profile", "companyName"]
           }
-        ]
+        ],
+        required: false
       },
     ],
     order: [["createdAt", "DESC"]],
   });
 
-  return reports.map((r: any) => {
+  return Promise.all(reports.map(async (r: any) => {
     // Get the complete thread object with all details
     let reportedThread = null;
     if (r.reportedThreadId && r.threads) {
@@ -1136,17 +1137,10 @@ export class ForumService {
       note: "Please view the detail page",
       reportedThread,
       reportedPrivateThread,
-      reporter: r.reporterUser ? {
-        id: r.reporterUser.id,
-        name: r.reporterUser.name,
-        email: r.reporterUser.email,
-        phone: r.reporterUser.phone,
-        roleId: r.reporterUser.roleId,
-        roleData: r.reporterUser.roleData
-      } : null,
+      reporter: await this.getReporterInfo(r.userId, r.roleId),
       createdAt: r.createdAt,
     };
-  });
+  }));
 };
 
 
@@ -1716,6 +1710,61 @@ public updateThreadStatus = async (
     } else {
       return `${userData.firstName} ${userData.lastName}(Employee)`;
     }
+  };
+
+  private getReporterInfo = async (userId: number, roleId: number) => {
+    if (roleId === 3) {
+      // Employee reporter
+      const employeeData = await employee.findOne({
+        where: { id: userId },
+        attributes: ["id", "firstName", "lastName", "email", "profile"],
+        include: [
+          {
+            model: users,
+            as: "users",
+            attributes: ["name"],
+          },
+        ],
+      });
+
+      if (employeeData) {
+        return {
+          id: employeeData.id,
+          name: `${employeeData.firstName} ${employeeData.lastName}`,
+          email: employeeData.email,
+          phone: null, // Employees don't have phone in their table
+          roleId: 3,
+          profile: employeeData.profile,
+          companyName: employeeData.users?.name || null
+        };
+      }
+    } else {
+      // User reporter (Freelancer, Company, Hobbyist/Student, Other)
+      const userData = await users.findOne({
+        where: { id: userId },
+        attributes: ["id", "name", "email", "phone", "roleId"],
+        include: [
+          {
+            as: "roleData",
+            model: roleData,
+            attributes: ["firstName", "lastName", "profile", "companyName"],
+          },
+        ],
+      });
+
+      if (userData) {
+        return {
+          id: userData.id,
+          name: userData.name,
+          email: userData.email,
+          phone: userData.phone,
+          roleId: userData.roleId,
+          roleData: userData.roleData
+        };
+      }
+    }
+
+    return null;
   };
 
   private getTypeId = (statusId: number) => {

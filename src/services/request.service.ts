@@ -779,12 +779,24 @@ export class RequestService {
   }
 
   // For roleId 3, fetch previous data from employee table, updated from duplicateData
-  let previousData;
-  let updatedData;
+  let previousData: any;
+  let updatedData: any;
 
   if (roleId === 3) {
-    previousData = res.employee; // original/original employee data
-    updatedData = res.get();     // updated/pending data in duplicateData
+    // Get the current employee data (previousData)
+    previousData = res.employee ? res.employee.get() : null;
+    
+    // Get the updated data from duplicateData (updatedData)
+    // Filter out metadata fields and only include the actual data fields
+    const duplicateDataValues = res.get();
+    updatedData = {} as any;
+    
+    // Only include the fields that are in attributeData (the fields we care about)
+    attributeData.forEach((field: string) => {
+      if (duplicateDataValues[field] !== undefined) {
+        updatedData[field] = duplicateDataValues[field];
+      }
+    });
   } else {
     previousData = res?.users?.get() || null;
 
@@ -950,21 +962,34 @@ export class RequestService {
     var userData: any;
 
     // Update profileStatus based on approval/rejection
-    const newProfileStatus = statusId === 1 ? 3 : 4; // 3 = Approved, 4 = Rejected
+    // Only update profileStatus when approved (statusId === 1), not when declined (statusId === 2)
+    const newProfileStatus = statusId === 1 ? 3 : null; // 3 = Approved, null = don't change
     
     if (roleId == 1 || roleId == 2) {
-      const updateData: any = { profileStatus: newProfileStatus };
+      const updateData: any = {};
+      if (newProfileStatus !== null) {
+        updateData.profileStatus = newProfileStatus;
+      }
       if (statusId === 2 && rejectionReason) {
         updateData.rejectionReason = rejectionReason;
       }
-      await users.update(updateData, { where: { id: userId }, transaction })
+      // Only update if there's data to update
+      if (Object.keys(updateData).length > 0) {
+        await users.update(updateData, { where: { id: userId }, transaction })
+      }
       userData = await users.findOne({ where: { id: userId, roleId: roleId }, attributes: ["fcmToken"] })
     } else {
-      const updateData: any = { profileStatus: newProfileStatus };
+      const updateData: any = {};
+      if (newProfileStatus !== null) {
+        updateData.profileStatus = newProfileStatus;
+      }
       if (statusId === 2 && rejectionReason) {
         updateData.rejectionReason = rejectionReason;
       }
-      await employee.update(updateData, { where: { id: userId }, transaction })
+      // Only update if there's data to update
+      if (Object.keys(updateData).length > 0) {
+        await employee.update(updateData, { where: { id: userId }, transaction })
+      }
       userData = await employee.findOne({ where: { id: userId }, attributes: ["fcmToken"] })
     }
 

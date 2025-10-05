@@ -26,6 +26,8 @@ export interface messagesI {
   deletedAt?: Date | null;
   isHidden?: boolean;
   hiddenBy?: number | null;
+  isDeleted?: boolean;
+  deletedBy?: number | null;
 }
 
 @Table({
@@ -79,12 +81,21 @@ export class messages extends Model<messagesI> {
   public deletedAt: Date;
 
   @Column({
-  type: DataType.BOOLEAN,
-  defaultValue: false,
-})
-public isHidden: boolean;
+    type: DataType.BOOLEAN,
+    defaultValue: false,
+  })
+  public isHidden: boolean;
 
-@Column(DataType.INTEGER)
-public hiddenBy: number | null;
+  @Column(DataType.INTEGER)
+  public hiddenBy: number | null;
+
+  @Column({
+    type: DataType.BOOLEAN,
+    defaultValue: false,
+  })
+  public isDeleted: boolean;
+
+  @Column(DataType.INTEGER)
+  public deletedBy: number | null;
 
 }

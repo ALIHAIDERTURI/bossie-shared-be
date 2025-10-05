@@ -2237,11 +2237,25 @@ export class UserService {
     } else {
       // Loop over each entry in sendTo array
       for (const recipient of sendTo) {
-        const { id, roleId } = recipient;
+        // Support both old format { id, roleId } and new UI format { userId, employeeId }
+        // Also preserve roleId and name fields for additional info
+        const { id, roleId, userId, employeeId, name } = recipient;
+        
+        let targetId, targetRoleId;
+        
+        if (userId !== undefined) {
+          // New UI format: { userId } or { employeeId }
+          targetId = userId || employeeId;
+          targetRoleId = userId ? 1 : 3; // Default roleId: 1 for users, 3 for employees
+        } else {
+          // Old format: { id, roleId }
+          targetId = id;
+          targetRoleId = roleId;
+        }
 
-        // Fetch user data based on the id and roleId
+        // Fetch user data based on the targetId and targetRoleId
         const UserData: any = await users.findAll({
-          where: { id, roleId },
+          where: { id: targetId, roleId: targetRoleId },
           attributes: ["fcmToken"],
         });
 
@@ -2249,9 +2263,9 @@ export class UserService {
           // If user is found, collect their FCM tokens
           allFcmTokens.push(...UserData.map((u: any) => u.fcmToken));
         } else {
-          // If no user is found, fetch employee data based on the id
+          // If no user is found, fetch employee data based on the targetId
           const employeeData: any = await employee.findAll({
-            where: { id },
+            where: { id: targetId },
             attributes: ["fcmToken"],
           });
 

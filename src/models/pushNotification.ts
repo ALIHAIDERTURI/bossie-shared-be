@@ -13,11 +13,11 @@ import { admin } from "./admin";
 export interface pushNotificationI {
   id?: number;
   sendBy?: number;
-  title?: string;
-  body?: string;
-  sendTo?: JSON;
-  isSendToAll?: boolean;
-  image?: string;
+  title?: string | null;
+  body?: string | null;
+  sendTo?: JSON | null;
+  isSendToAll?: boolean | null;
+  image?: string | null;
   createdAt?: Date;
   updatedAt?: Date;
   deletedAt?: Date | null;
@@ -37,23 +37,23 @@ export class pushNotification extends Model<pushNotificationI> {
   @Column(DataType.INTEGER)
   public id: number;
 
-  @ForeignKey((): typeof admin => admin)
+  @ForeignKey(() => admin)
   @Column(DataType.INTEGER)
   public sendBy: number;
 
-  @Column(DataType.STRING)
+  @Column({ type: DataType.STRING, allowNull: true })
   public title: string;
 
-  @Column(DataType.STRING)
+  @Column({ type: DataType.STRING, allowNull: true })
   public body: string;
 
-  @Column(DataType.JSON)
+  @Column({ type: DataType.JSON, allowNull: true })
   public sendTo: JSON;
 
-  @Column(DataType.TINYINT)
+  @Column({ type: DataType.TINYINT, allowNull: true, defaultValue: false })
   public isSendToAll: boolean;
 
-  @Column(DataType.STRING)
+  @Column({ type: DataType.STRING, allowNull: true })
   public image: string;
 
   @Column(DataType.DATE)

@@ -54,5 +54,15 @@ export const socketRouter = (io: Server) => {
 
       socketController.leavePrivateRoom(io, socket, data);
     });
+
+    socket.on("hideMessage", (data) => {
+      console.log("In hideMessage action");
+      socketController.hideMessage(socket, io, data);
+    });
+
+    socket.on("deleteMessage", (data) => {
+      console.log("In deleteMessage action");
+      socketController.deleteMessage(socket, io, data);
+    });
   });
 };

@@ -157,4 +157,125 @@ export class NotificationController {
       });
     }
   };
+
+  public getNotificationHistory = async (req: Request, res: Response) => {
+    try {
+      const { query } = req;
+      const { adminId, limit = 20, offset = 0, search } = query;
+      
+      let message = "Notification history fetched successfully.";
+      const response: any = await this.__service.getNotificationHistory({
+        adminId: adminId ? parseInt(adminId as string) : undefined,
+        limit: parseInt(limit as string),
+        offset: parseInt(offset as string),
+        search: search as string
+      });
+
+      res.status(200).json({
+        statusCode: 200,
+        message,
+        data: response,
+      });
+    } catch (error: any) {
+      res.status(500).json({
+        statusCode: 500,
+        message: error.message,
+      });
+    }
+  };
+
+  public searchNotifications = async (req: Request, res: Response) => {
+    try {
+      const { query } = req;
+      const { search, adminId, limit = 20, offset = 0 } = query;
+      
+      if (!search) {
+        return res.status(400).json({
+          statusCode: 400,
+          message: "Search term is required",
+        });
+      }
+
+      let message = "Notifications searched successfully.";
+      const response: any = await this.__service.searchNotifications({
+        search: search as string,
+        adminId: adminId ? parseInt(adminId as string) : undefined,
+        limit: parseInt(limit as string),
+        offset: parseInt(offset as string)
+      });
+
+      res.status(200).json({
+        statusCode: 200,
+        message,
+        data: response,
+      });
+    } catch (error: any) {
+      res.status(500).json({
+        statusCode: 500,
+        message: error.message,
+      });
+    }
+  };
+
+  public resendNotification = async (req: Request, res: Response) => {
+    try {
+      const { body } = req;
+      const { notificationId, adminId } = body;
+      
+      if (!notificationId || !adminId) {
+        return res.status(400).json({
+          statusCode: 400,
+          message: "notificationId and adminId are required",
+        });
+      }
+
+      let message = "Notification resent successfully.";
+      const response: any = await this.__service.resendNotification({
+        notificationId: parseInt(notificationId),
+        adminId: parseInt(adminId)
+      });
+
+      res.status(200).json({
+        statusCode: 200,
+        message,
+        data: response,
+      });
+    } catch (error: any) {
+      res.status(500).json({
+        statusCode: 500,
+        message: error.message,
+      });
+    }
+  };
+
+  public getNotificationDetails = async (req: Request, res: Response) => {
+    try {
+      const { query } = req;
+      const { notificationId, adminId } = query;
+      
+      if (!notificationId) {
+        return res.status(400).json({
+          statusCode: 400,
+          message: "notificationId is required",
+        });
+      }
+
+      let message = "Notification details fetched successfully.";
+      const response: any = await this.__service.getNotificationDetails({
+        notificationId: parseInt(notificationId as string),
+        adminId: adminId ? parseInt(adminId as string) : undefined
+      });
+
+      res.status(200).json({
+        statusCode: 200,
+        message,
+        data: response,
+      });
+    } catch (error: any) {
+      res.status(500).json({
+        statusCode: 500,
+        message: error.message,
+      });
+    }
+  };
 }

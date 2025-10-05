@@ -25,6 +25,7 @@ import { sendPushNotification } from "@src/utils/pushNotification";
 import { getProcessedTemplate } from "@src/utils/renderEmailTemplate";
 import { sendEmail } from "@src/utils/sendEmail";
 import { ToxicityService } from "./toxicity.service";
+import { NotificationService } from "./notifications.service";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { Op, Sequelize, Transaction } from "sequelize";
@@ -32,9 +33,11 @@ import { Op, Sequelize, Transaction } from "sequelize";
 
 export class AdminService {
   private toxicityService: ToxicityService;
+  private notificationService: NotificationService;
 
   constructor() {
     this.toxicityService = new ToxicityService();
+    this.notificationService = new NotificationService();
   }
 
   public adminLogin = async (data: any): Promise<any> => {
@@ -4087,6 +4090,7 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
 
   return {
     ...employeeInfo.toJSON(),
+    lastLogin: (employeeInfo.users as any)?.lastLogin || null,
     companyName,
     logs: employeeLogs,
     threads: allThreads,
@@ -4818,7 +4822,7 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
             {
               as: "roleData",
               model: roleData,
-              attributes: ["companyName", "firstName", "lastName"],
+              attributes: ["companyName", "firstName", "lastName", "profile"],
             },
           ],
         },
@@ -4829,6 +4833,7 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
             "id",
             "firstName",
             "lastName",
+            "profile",
             [Sequelize.literal("3"), "roleId"],
           ],
           include: [
@@ -4840,7 +4845,7 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
                 {
                   as: "roleData",
                   model: roleData,
-                  attributes: ["companyName", "firstName", "lastName"],
+                  attributes: ["companyName", "firstName", "lastName", "profile"],
                 },
               ],
             },
@@ -7424,22 +7429,45 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
   };
 
   public getUserThreads = async (data: any): Promise<any> => {
-    const { userId, limit = 10, offset = 0 } = data;
+    const { userId, roleId, limit = 10, offset = 0 } = data;
 
-    // Check if user exists
-    const userExists = await users.findOne({
-      where: { id: userId, deletedAt: null }
-    });
-    if (!userExists) {
-      throw new Error("User not found");
+    // Check if user exists based on role
+    if (roleId === 3) {
+      // Check if employee exists
+      const employeeExists = await employee.findOne({
+        where: { id: userId, deletedAt: null }
+      });
+      if (!employeeExists) {
+        throw new Error("Employee not found");
+      }
+    } else {
+      // Check if user exists
+      const userExists = await users.findOne({
+        where: { id: userId, deletedAt: null }
+      });
+      if (!userExists) {
+        throw new Error("User not found");
+      }
     }
 
     // Get threads where user is the owner
+    const whereClause: any = {
+      roleId: roleId,
+      deletedAt: null
+    };
+    
+    if (roleId === 3) {
+      // For employees: check ownerEmpId and ensure ownerId is null/0
+      whereClause.ownerEmpId = userId;
+      whereClause.ownerId = { [Op.or]: [null, 0] };
+    } else {
+      // For users: check ownerId and ensure ownerEmpId is null/0
+      whereClause.ownerId = userId;
+      whereClause.ownerEmpId = { [Op.or]: [null, 0] };
+    }
+
     const ownedThreads = await threads.findAll({
-      where: {
-        ownerId: userId,
-        deletedAt: null
-      },
+      where: whereClause,
       attributes: [
         "id",
         "title",
@@ -7475,9 +7503,11 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
             SELECT DISTINCT roomId 
             FROM messages 
             WHERE userId = ${userId} 
+            AND roleId = ${roleId}
             AND deletedAt IS NULL
           )`)
         },
+        roleId: roleId,
         deletedAt: null
       },
       attributes: [
@@ -7757,13 +7787,23 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
       ? "Uw account is succesvol goedgekeurd."
       : `Uw account is afgewezen vanwege ${rejectionReason || "onbekende reden"}.`;
 
-    await userNotification.create({
-      userId: userId,
-      adminId: adminId,
-      content: notificationBody,
-      seen: false,
-      typeId: isApproved ? 1 : 2 // 1 = approved, 2 = rejected
-    });
+    // Use new unified notification system
+    if (isApproved) {
+      await this.notificationService.createApprovalNotification({
+        userId: userId,
+        adminId: adminId,
+        title: `Account ${notificationStatus}`,
+        content: notificationBody
+      });
+    } else {
+      await this.notificationService.createRejectionNotification({
+        userId: userId,
+        adminId: adminId,
+        title: `Account ${notificationStatus}`,
+        content: notificationBody,
+        rejectionReason: rejectionReason
+      });
+    }
 
     if (userData?.fcmToken) {
       try {
@@ -7847,6 +7887,10 @@ public approveRejectEmployee = async (data: any): Promise<any> => {
     logData.rejectedOn = new Date();
   }
 
+  // Always create the standard log entry
+  await userLog.create(logData);
+
+  // Additionally create custom log if provided for rejection
   if (!isApproved && customLog && customLog.trim() !== "") {
     await this.addCustomUserLog({
       userId: employeeExists.userId,
@@ -7855,8 +7899,6 @@ public approveRejectEmployee = async (data: any): Promise<any> => {
       activity: customLog,
       adminId: adminId
     });
-  } else {
-    await userLog.create(logData);
   }
 
   // 7️⃣ Fetch employee + user for notification
@@ -8079,7 +8121,7 @@ public approveRejectEmployee = async (data: any): Promise<any> => {
   // Determine which table to query based on role
   let userExists: any;
   if (roleId === 3) { // Employee
-    userExists = await employee.findOne({ where: { userId, deletedAt: null } });
+    userExists = await employee.findOne({ where: { id: userId, deletedAt: null } });
   } else if (roleId === 2) { // Company
     userExists = await roleData.findOne({ where: { userId, deletedAt: null } });
   } else { // Generic User
@@ -8106,34 +8148,52 @@ public approveRejectEmployee = async (data: any): Promise<any> => {
     throw new Error("Invalid status. Use 'approved' or 'rejected'");
   }
 
-  // Handle approval: reset suspension/mute if applicable
-  if (status === "approved" && roleId === 3) { // Only employees have logs
-    const latestSuspension = await userLog.findOne({
-      where: { userId, isSuspend: true, deletedAt: null },
-      order: [["createdAt", "DESC"]],
-    });
-
-    const latestMute = await userLog.findOne({
-      where: { userId, isMuted: true, deletedAt: null },
-      order: [["createdAt", "DESC"]],
-    });
-
-    if (latestSuspension) {
-      await userLog.create({
-        userId,
-        isSuspend: false,
-        unSuspendedBy: adminId,
-        unSuspendedOn: new Date(),
-      });
+  // Handle approval: reset suspension/mute if applicable and update account status
+  if (status === "approved") {
+    // Update accountStatus to 1 (available) for all roles
+    if (roleId === 1 || roleId === 2) {
+      // For users (freelancer, company) - update roleData
+      await roleData.update(
+        { accountStatus: 1 },
+        { where: { userId } }
+      );
+    } else if (roleId === 3) {
+      // For employees - update employee table
+      await employee.update(
+        { accountStatus: 1 },
+        { where: { id: userId } }
+      );
     }
 
-    if (latestMute) {
-      await userLog.create({
-        userId,
-        isMuted: false,
-        unMutedBy: adminId,
-        unMutedOn: new Date(),
+    // Only employees have user logs for suspension/mute
+    if (roleId === 3) {
+      const latestSuspension = await userLog.findOne({
+        where: { userId, isSuspend: true, deletedAt: null },
+        order: [["createdAt", "DESC"]],
       });
+
+      const latestMute = await userLog.findOne({
+        where: { userId, isMuted: true, deletedAt: null },
+        order: [["createdAt", "DESC"]],
+      });
+
+      if (latestSuspension) {
+        await userLog.create({
+          userId,
+          isSuspend: false,
+          unSuspendedBy: adminId,
+          unSuspendedOn: new Date(),
+        });
+      }
+
+      if (latestMute) {
+        await userLog.create({
+          userId,
+          isMuted: false,
+          unMutedBy: adminId,
+          unMutedOn: new Date(),
+        });
+      }
     }
   }
 
