@@ -1006,18 +1006,32 @@ export class ForumService {
         model: threads,
         as: "threads",
         include: [
-          { model: forumCategory, as: "forumCategory", attributes: ["id", "name", "icon"] },
-          { model: forumSubCategory, as: "forumSubCategory", attributes: ["id", "name", "description"] },
-          { 
-            model: users, 
-            as: "users", 
-            attributes: ["id", "name", "email", "roleId"],
-            include: [{ model: roleData, as: "roleData", attributes: ["firstName","lastName","profile","companyName"] }]
+          {
+            model: forumCategory,
+            as: "forumCategory",
+            attributes: ["id", "name", "icon"]
           },
-          { 
-            model: employee, 
-            as: "employee", 
-            attributes: ["id","firstName","lastName","email","profile"] 
+          {
+            model: forumSubCategory,
+            as: "forumSubCategory", 
+            attributes: ["id", "name", "description"]
+          },
+          {
+            model: users,
+            as: "users",
+            attributes: ["id", "name", "email", "roleId"],
+            include: [
+              {
+                model: roleData,
+                as: "roleData",
+                attributes: ["firstName", "lastName", "profile", "companyName"]
+              }
+            ]
+          },
+          {
+            model: employee,
+            as: "employee",
+            attributes: ["id", "firstName", "lastName", "email", "profile"]
           }
         ]
       },
@@ -1025,11 +1039,17 @@ export class ForumService {
         model: privateThreads,
         as: "privateThreads",
         include: [
-          { 
-            model: users, 
-            as: "users", 
+          {
+            model: users,
+            as: "users",
             attributes: ["id", "name", "email", "roleId"],
-            include: [{ model: roleData, as: "roleData", attributes: ["firstName","lastName","profile","companyName"] }]
+            include: [
+              {
+                model: roleData,
+                as: "roleData",
+                attributes: ["firstName", "lastName", "profile", "companyName"]
+              }
+            ]
           }
         ]
       },
@@ -1037,86 +1057,77 @@ export class ForumService {
         model: users,
         as: "reporterUser",
         attributes: ["id", "name", "email", "roleId", "phone"],
-        include: [{ model: roleData, as: "roleData", attributes: ["firstName","lastName","profile","companyName"] }]
+        include: [
+          {
+            model: roleData,
+            as: "roleData",
+            attributes: ["firstName", "lastName", "profile", "companyName"]
+          }
+        ]
       },
-      {
-        model: employee,
-        as: "reporterEmployee",
-        attributes: ["id","firstName","lastName","email","profile","roleId"]
-      }
     ],
     order: [["createdAt", "DESC"]],
   });
 
   return reports.map((r: any) => {
-    // Thread details
-    const reportedThread = r.reportedThreadId && r.threads ? {
-      id: r.threads.id,
-      title: r.threads.title,
-      description: r.threads.description,
-      logo: r.threads.logo,
-      locked: r.threads.locked,
-      hidden: r.threads.hidden,
-      pinned: r.threads.pinned,
-      suggested: r.threads.suggested,
-      createdAt: r.threads.createdAt,
-      updatedAt: r.threads.updatedAt,
-      category: r.threads.forumCategory ? {
-        id: r.threads.forumCategory.id,
-        name: r.threads.forumCategory.name,
-        icon: r.threads.forumCategory.icon
-      } : null,
-      subCategory: r.threads.forumSubCategory ? {
-        id: r.threads.forumSubCategory.id,
-        name: r.threads.forumSubCategory.name,
-        description: r.threads.forumSubCategory.description
-      } : null,
-      owner: r.threads.users ? {
-        id: r.threads.users.id,
-        name: r.threads.users.name,
-        email: r.threads.users.email,
-        roleId: r.threads.users.roleId,
-        roleData: r.threads.users.roleData
-      } : r.threads.employee ? {
-        id: r.threads.employee.id,
-        name: `${r.threads.employee.firstName} ${r.threads.employee.lastName}`,
-        email: r.threads.employee.email,
-        roleId: 3,
-        profile: r.threads.employee.profile
-      } : null
-    } : null;
+    // Get the complete thread object with all details
+    let reportedThread = null;
+    if (r.reportedThreadId && r.threads) {
+      reportedThread = {
+        id: r.threads.id,
+        title: r.threads.title,
+        description: r.threads.description,
+        logo: r.threads.logo,
+        locked: r.threads.locked,
+        hidden: r.threads.hidden,
+        pinned: r.threads.pinned,
+        suggested: r.threads.suggested,
+        createdAt: r.threads.createdAt,
+        updatedAt: r.threads.updatedAt,
+        category: r.threads.forumCategory ? {
+          id: r.threads.forumCategory.id,
+          name: r.threads.forumCategory.name,
+          icon: r.threads.forumCategory.icon
+        } : null,
+        subCategory: r.threads.forumSubCategory ? {
+          id: r.threads.forumSubCategory.id,
+          name: r.threads.forumSubCategory.name,
+          description: r.threads.forumSubCategory.description
+        } : null,
+        owner: r.threads.users ? {
+          id: r.threads.users.id,
+          name: r.threads.users.name,
+          email: r.threads.users.email,
+          roleId: r.threads.users.roleId,
+          roleData: r.threads.users.roleData
+        } : r.threads.employee ? {
+          id: r.threads.employee.id,
+          name: `${r.threads.employee.firstName} ${r.threads.employee.lastName}`,
+          email: r.threads.employee.email,
+          roleId: 3,
+          profile: r.threads.employee.profile
+        } : null
+      };
+    }
 
-    // Private thread details
-    const reportedPrivateThread = r.reportedP_ThreadId && r.privateThreads ? {
-      id: r.privateThreads.id,
-      title: r.privateThreads.title,
-      description: r.privateThreads.description,
-      createdAt: r.privateThreads.createdAt,
-      updatedAt: r.privateThreads.updatedAt,
-      owner: r.privateThreads.users ? {
-        id: r.privateThreads.users.id,
-        name: r.privateThreads.users.name,
-        email: r.privateThreads.users.email,
-        roleId: r.privateThreads.users.roleId,
-        roleData: r.privateThreads.users.roleData
-      } : null
-    } : null;
-
-    // Reporter fix: prefer employee if exists
-    const reporter = r.reporterEmployee ? {
-      id: r.reporterEmployee.id,
-      name: `${r.reporterEmployee.firstName} ${r.reporterEmployee.lastName}`,
-      email: r.reporterEmployee.email,
-      roleId: r.reporterEmployee.roleId || 3,
-      profile: r.reporterEmployee.profile
-    } : r.reporterUser ? {
-      id: r.reporterUser.id,
-      name: r.reporterUser.name,
-      email: r.reporterUser.email,
-      phone: r.reporterUser.phone,
-      roleId: r.reporterUser.roleId,
-      roleData: r.reporterUser.roleData
-    } : null;
+    // Get the complete private thread object with all details
+    let reportedPrivateThread = null;
+    if (r.reportedP_ThreadId && r.privateThreads) {
+      reportedPrivateThread = {
+        id: r.privateThreads.id,
+        title: r.privateThreads.title,
+        description: r.privateThreads.description,
+        createdAt: r.privateThreads.createdAt,
+        updatedAt: r.privateThreads.updatedAt,
+        owner: r.privateThreads.users ? {
+          id: r.privateThreads.users.id,
+          name: r.privateThreads.users.name,
+          email: r.privateThreads.users.email,
+          roleId: r.privateThreads.users.roleId,
+          roleData: r.privateThreads.users.roleData
+        } : null
+      };
+    }
 
     return {
       id: r.id,
@@ -1125,13 +1136,18 @@ export class ForumService {
       note: "Please view the detail page",
       reportedThread,
       reportedPrivateThread,
-      reporter,
+      reporter: r.reporterUser ? {
+        id: r.reporterUser.id,
+        name: r.reporterUser.name,
+        email: r.reporterUser.email,
+        phone: r.reporterUser.phone,
+        roleId: r.reporterUser.roleId,
+        roleData: r.reporterUser.roleData
+      } : null,
       createdAt: r.createdAt,
     };
   });
 };
-
-
 
 
 
