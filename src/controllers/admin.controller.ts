@@ -31,6 +31,7 @@ import {
   addCustomModeratorLogSchema,
   getReportedUsersSchema,
   addCustomUserLogSchema,
+  addCustomForumThreadLogSchema,
   getAllCompanyInfoSchema,
   getUsersAppealsSchema,
   getRegistrationRequestsSchema,
@@ -1538,6 +1539,31 @@ export class AdminController {
       return res.status(200).json({
         statusCode: 200,
         message: "Custom user log added successfully.",
+        response
+      });
+    } catch (error: any) {
+      return res.status(403).json({
+        statusCode: 403,
+        message: error.message,
+      });
+    }
+  };
+
+  public addCustomForumThreadLog = async (req: Request, res: Response) => {
+    try {
+      const { forumId, adminId, customActivity } = req.body;
+
+      const data = await addCustomForumThreadLogSchema.validateAsync({
+        forumId: forumId,
+        adminId: adminId,
+        customActivity: customActivity
+      });
+
+      const response = await this.__service.addCustomForumThreadLog(data);
+
+      return res.status(200).json({
+        statusCode: 200,
+        message: "Custom forum thread log added successfully.",
         response
       });
     } catch (error: any) {

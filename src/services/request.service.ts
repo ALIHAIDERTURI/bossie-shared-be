@@ -962,8 +962,8 @@ export class RequestService {
     var userData: any;
 
     // Update profileStatus based on approval/rejection
-    // Only update profileStatus when approved (statusId === 1), not when declined (statusId === 2)
-    const newProfileStatus = statusId === 1 ? 3 : null; // 3 = Approved, null = don't change
+    // Set profileStatus to 3 for both approved (statusId === 1) and rejected (statusId === 2) requests
+    const newProfileStatus = statusId === 1 || statusId === 2 ? 3 : null; // 3 = Approved/Rejected, null = don't change
     
     if (roleId == 1 || roleId == 2) {
       const updateData: any = {};

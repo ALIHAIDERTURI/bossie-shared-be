@@ -84,9 +84,28 @@ export class SocketService {
         //     attributes: ["firstName", "lastName", "profile", "id"],
         //   });
         // }
-        let name: any;
+        
+        // Check if this message is from an admin
+        const isAdminMessage = await admin.findOne({
+          where: { id: msg.userId, deletedAt: null },
+          attributes: ["id", "name", "adminRoleId"],
+          raw: true
+        });
 
-        if (msg.roleId == 2) {
+        let name: any;
+        let isAdmin = false;
+        let adminId = null;
+        let adminName = null;
+        let adminRoleId = null;
+
+        if (isAdminMessage) {
+          // This is an admin message
+          name = isAdminMessage.name;
+          isAdmin = true;
+          adminId = isAdminMessage.id;
+          adminName = isAdminMessage.name;
+          adminRoleId = isAdminMessage.adminRoleId;
+        } else if (msg.roleId == 2) {
           name = msg.users?.roleData?.companyName;
         } else if (msg.roleId == 1) {
           name = `${msg.users?.roleData?.firstName} ${msg.users?.roleData?.lastName}`;
@@ -95,13 +114,11 @@ export class SocketService {
         }
 
         return {
-          userId: msg.roleId !== 3 ? msg.users.id : msg.employee.id,
-          roleId: msg.roleId,
+          messageId: msg.id,
+          userId: isAdminMessage ? isAdminMessage.id : (msg.roleId !== 3 ? msg.users?.id : msg.employee?.id),
+          roleId: isAdminMessage ? 999 : msg.roleId, // Keep original logic
           name: name,
-          userLogo:
-            msg.roleId !== 3
-              ? msg.users?.roleData?.profile
-              : msg.employee?.profile,
+          userLogo: isAdminMessage ? null : (msg.roleId !== 3 ? msg.users?.roleData?.profile : msg.employee?.profile),
           roomId: msg.roomId,
           roomName: isRoom.title,
           message: msg.message,
@@ -109,6 +126,9 @@ export class SocketService {
           timeStamp: msg.createdAt,
           isHidden: msg.isHidden || false,
           isDeleted: msg.isDeleted || false,
+          isAdmin: isAdmin,
+          adminId: adminId,
+          adminName: adminName,
         };
       })
     );
@@ -125,7 +145,7 @@ export class SocketService {
     data: any,
     transaction: Transaction
   ): Promise<any> => {
-    const { userId, roomId, message, roleId, img } = data;
+    const { userId, roomId, message, roleId, img, adminId, isAdmin } = data;
     let messageCreate: any
     console.log("in sending msg service");
     const roomExist: any = await threads.findOne({
@@ -137,6 +157,13 @@ export class SocketService {
       throw new Error("Er is geen kamer beschikbaar.");
     }
     if (!roomExist.locked) {
+      // First, check if the user is an admin
+      const isUserAdmin = await admin.findOne({
+        where: { id: userId, deletedAt: null },
+        attributes: ["id", "name", "adminRoleId"],
+        raw: true
+      });
+
       const userColName = roleId == 3 ? "empId" : "userId";
 
       messageCreate = await messages.create(
@@ -148,8 +175,40 @@ export class SocketService {
         throw new Error("Bericht kan niet worden gemaakt.");
       }
 
-      if (roleId != 3) {
-        // const userResponse: any = await users.findByPk(userId);
+      // Handle admin messages (either explicitly marked as admin or detected as admin)
+      if ((isAdmin && adminId) || isUserAdmin) {
+        console.log("in send msg , admin condition");
+        
+        const adminResponse = isUserAdmin || await admin.findOne({
+          where: { id: adminId || userId }, 
+          attributes: ["id", "name", "adminRoleId"],
+          raw: true
+        });
+
+        if (!adminResponse) {
+          throw new Error("Admin not found.");
+        }
+
+        io.to(roomId).emit("message", {
+          messageId: messageCreate.id,
+          userId: adminResponse.id,
+          roleId: 999, // Keep original special roleId for admin
+          name: adminResponse.name,
+          userLogo: null, // Admins don't have profile images
+          roomId,
+          roomName: roomExist.title,
+          message,
+          img,
+          timeStamp: messageCreate.createdAt,
+          isHidden: false,
+          isDeleted: false,
+          isAdmin: true,
+          adminId: adminResponse.id,
+          adminName: adminResponse.name,
+        });
+
+      } else if (roleId != 3) {
+        // Handle regular users (freelancers and companies)
         const userResponse: any = await users.findOne({
           where: { id: userId },
           include: [
@@ -164,8 +223,6 @@ export class SocketService {
         if (!userResponse) {
           throw new Error("Het is niet toegestaan ​​om berichten te versturen.")
         }
-
-
 
          io.to(roomId).emit("message", {
            messageId: messageCreate.id,
@@ -183,8 +240,10 @@ export class SocketService {
            timeStamp: messageCreate.createdAt,
            isHidden: false,
            isDeleted: false,
+           isAdmin: false,
          });
       } else {
+        // Handle employees
         console.log("in send msg , emp condition");
 
         const userResponse: any = await employee.findOne({
@@ -193,7 +252,6 @@ export class SocketService {
         console.log(
           "userResponse", userResponse
         );
-
 
         if (!userResponse) {
           throw new Error("Het is niet toegestaan ​​om berichten te versturen.")
@@ -212,6 +270,7 @@ export class SocketService {
            timeStamp: messageCreate.createdAt,
            isHidden: false,
            isDeleted: false,
+           isAdmin: false,
          });
       }
 
@@ -247,6 +306,35 @@ export class SocketService {
     });
 
     return { success: true, message: "Message hidden successfully" };
+  };
+
+  public unhideMessage = async (
+    socket: any,
+    io: any,
+    data: any,
+    transaction: Transaction
+  ): Promise<any> => {
+    const { messageId, adminId } = data;
+
+    const message = await messages.findOne({
+      where: { id: messageId, isDeleted: false }
+    });
+
+    if (!message) {
+      throw new Error("Message not found");
+    }
+
+    await message.update(
+      { isHidden: false, hiddenBy: null },
+      { transaction }
+    );
+
+    io.to(message.roomId.toString()).emit("messageUnhidden", {
+      messageId: messageId,
+      unhiddenBy: adminId,
+    });
+
+    return { success: true, message: "Message unhidden successfully" };
   };
 
   public deleteMessage = async (

@@ -25,7 +25,10 @@ export interface threadLogI {
   isHidden?: boolean;
   hiddenBy?: number;
   isPinned?: boolean;
-  pinnedBy?: number;  
+  pinnedBy?: number;
+  // Custom activity fields
+  customActivity?: string;
+  customActivityBy?: number;
 }
 
 @Table({
@@ -96,6 +99,17 @@ public isPinned: boolean;
 @ForeignKey((): typeof admin => admin)
 @Column(DataType.INTEGER)
 public pinnedBy: number;
+
+// Custom activity fields
+@Column(DataType.STRING)
+public customActivity: string;
+
+@ForeignKey((): typeof admin => admin)
+@Column(DataType.INTEGER)
+public customActivityBy: number;
+
+@BelongsTo((): typeof admin => admin, "customActivityBy")
+public customActivityAdmin: typeof admin;
 
 }
 

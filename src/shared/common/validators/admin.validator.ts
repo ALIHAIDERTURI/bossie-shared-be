@@ -199,6 +199,12 @@ export const addCustomUserLogSchema = Joi.object({
   adminId: Joi.number().integer().required()
 });
 
+export const addCustomForumThreadLogSchema = Joi.object({
+  forumId: Joi.number().integer().required(),
+  adminId: Joi.number().integer().required(),
+  customActivity: Joi.string().required().min(1).max(500)
+});
+
 export const getReportedUsersSchema = Joi.object({
   limit: Joi.number().integer().min(1).max(100).default(10),
   offset: Joi.number().integer().min(0).default(0),

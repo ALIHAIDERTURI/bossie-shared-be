@@ -189,6 +189,30 @@ export class SocketController {
     }
   };
 
+  public unhideMessage = async (socket: any, io: any, data: any) => {
+    try {
+      const transaction = await sequelize.transaction();
+      try {
+        const response: any = await this.__service.unhideMessage(
+          socket,
+          io,
+          data,
+          transaction
+        );
+        await transaction.commit();
+        socket.emit("unhideMessageSuccess", response);
+      } catch (error: any) {
+        if (transaction) {
+          transaction.rollback();
+        }
+        socket.emit("unhideMessageError", error.message);
+      }
+    } catch (error: any) {
+      console.log(error);
+      socket.emit("unhideMessageError", "An unexpected error occurred");
+    }
+  };
+
   public deleteMessage = async (socket: any, io: any, data: any) => {
     try {
       const transaction = await sequelize.transaction();

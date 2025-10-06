@@ -233,6 +233,10 @@ adminRouter.post("/addCustomUserLog", (...args: [Request, Response]) =>
   adminControler.addCustomUserLog(...args)
 );
 
+adminRouter.post("/addCustomForumThreadLog", (...args: [Request, Response]) =>
+  adminControler.addCustomForumThreadLog(...args)
+);
+
 adminRouter.get("/getModeratorActivityLogs/:moderatorId", (...args: [Request, Response]) =>
   adminControler.getModeratorActivityLogs(...args)
 );

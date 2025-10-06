@@ -85,6 +85,8 @@ export const sendMessageSchema = Joi.object({
   message: Joi.string().allow("", null).optional(),
   img: Joi.string().allow("", null).optional(),
   roleId: Joi.number().integer().required(),
+  adminId: Joi.number().integer().optional(),
+  isAdmin: Joi.boolean().optional(),
 });
 
 export const joinRoomSchema = Joi.object({

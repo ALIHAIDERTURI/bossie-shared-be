@@ -60,6 +60,11 @@ export const socketRouter = (io: Server) => {
       socketController.hideMessage(socket, io, data);
     });
 
+    socket.on("unhideMessage", (data) => {
+      console.log("In unhideMessage action");
+      socketController.unhideMessage(socket, io, data);
+    });
+
     socket.on("deleteMessage", (data) => {
       console.log("In deleteMessage action");
       socketController.deleteMessage(socket, io, data);

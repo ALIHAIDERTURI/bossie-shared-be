@@ -4603,7 +4603,7 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
 
   if (!logs || logs.length === 0) return [];
 
-  // 2) collect all admin ids referenced in logs (lockedBy, unLockedBy, editedBy, hiddenBy, pinnedBy)
+  // 2) collect all admin ids referenced in logs (lockedBy, unLockedBy, editedBy, hiddenBy, pinnedBy, customActivityBy)
   const adminIdSet = new Set<number>();
   for (const l of logs) {
     if (l.lockedBy) adminIdSet.add(l.lockedBy);
@@ -4611,6 +4611,7 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
     if (l.editedBy) adminIdSet.add(l.editedBy);
     if (l.hiddenBy) adminIdSet.add(l.hiddenBy);
     if (l.pinnedBy) adminIdSet.add(l.pinnedBy);
+    if (l.customActivityBy) adminIdSet.add(l.customActivityBy);
   }
   const adminIds = Array.from(adminIdSet);
   // 3) fetch admin rows in one query
@@ -4631,8 +4632,19 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
     let action = "Unknown action";
     let actor: any = null;
 
+    // Custom Activity Log
+    if (log.customActivity && log.customActivityBy) {
+      action = log.customActivity;
+      if (adminById.has(log.customActivityBy)) {
+        const ad = adminById.get(log.customActivityBy);
+        actor = { id: ad.id, roleId: ad.adminRoleId, name: ad.name, source: "admin" };
+      } else {
+        actor = { source: "admin" };
+      }
+    }
+
     // Edited
-    if (log.isEdited) {
+    else if (log.isEdited) {
       action = "Thread edited by admin";
       if (log.editedBy && adminById.has(log.editedBy)) {
         const ad = adminById.get(log.editedBy);
@@ -4731,6 +4743,53 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
 
 
 
+
+  public addCustomForumThreadLog = async (data: any): Promise<any> => {
+    const { forumId, adminId, customActivity } = data;
+
+    // Validate thread exists
+    const threadExists = await threads.findOne({
+      where: { id: forumId, deletedAt: null }
+    });
+    if (!threadExists) {
+      throw new Error("Forum thread not found");
+    }
+
+    // Validate admin exists
+    const adminUser = await admin.findOne({
+      where: { id: adminId, deletedAt: null }
+    });
+    if (!adminUser) {
+      throw new Error("Admin not found");
+    }
+
+    // Create custom log entry
+    const customLog = await threadLog.create({
+      threadId: forumId,
+      customActivity: customActivity,
+      customActivityBy: adminId,
+      // Set all other fields to undefined/false to indicate this is a custom log
+      isEdited: false,
+      editedBy: undefined,
+      isLocked: undefined,
+      lockedBy: undefined,
+      unLockedBy: undefined,
+      isHidden: undefined,
+      hiddenBy: undefined,
+      isPinned: undefined,
+      pinnedBy: undefined,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    });
+
+    return {
+      id: customLog.id,
+      threadId: forumId,
+      customActivity: customActivity,
+      adminId: adminId,
+      createdAt: customLog.createdAt
+    };
+  };
 
   public updateAdminPassword = async (data: any): Promise<any> => {
     const { id, currentPass, newPass, confirmPass } = data;
@@ -8168,18 +8227,18 @@ public approveRejectEmployee = async (data: any): Promise<any> => {
     // Only employees have user logs for suspension/mute
     if (roleId === 3) {
       const latestSuspension = await userLog.findOne({
-        where: { userId, isSuspend: true, deletedAt: null },
+        where: { employeeId: userId, isSuspend: true, deletedAt: null },
         order: [["createdAt", "DESC"]],
       });
 
       const latestMute = await userLog.findOne({
-        where: { userId, isMuted: true, deletedAt: null },
+        where: { employeeId: userId, isMuted: true, deletedAt: null },
         order: [["createdAt", "DESC"]],
       });
 
       if (latestSuspension) {
         await userLog.create({
-          userId,
+          employeeId: userId,
           isSuspend: false,
           unSuspendedBy: adminId,
           unSuspendedOn: new Date(),
@@ -8188,7 +8247,7 @@ public approveRejectEmployee = async (data: any): Promise<any> => {
 
       if (latestMute) {
         await userLog.create({
-          userId,
+          employeeId: userId,
           isMuted: false,
           unMutedBy: adminId,
           unMutedOn: new Date(),
@@ -8202,7 +8261,7 @@ public approveRejectEmployee = async (data: any): Promise<any> => {
   if (status === "rejected" && rejectionReason) updateData.rejectionReason = rejectionReason;
 
   // Update in correct table
-  if (roleId === 3) await employee.update(updateData, { where: { userId } });
+  if (roleId === 3) await employee.update(updateData, { where: { id: userId } });
   else if (roleId === 2) await roleData.update(updateData, { where: { userId } });
   else await users.update(updateData, { where: { id: userId } });
 
