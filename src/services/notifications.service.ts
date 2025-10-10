@@ -5,7 +5,6 @@ import {
   employee,
   forumCategory,
   forumSubCategory,
-  notifications,
   privateMessages,
   privateThreads,
   pushNotification,
@@ -271,6 +270,45 @@ export class NotificationService {
       title,
       body,
       isSendToAll,
+      notificationType: 'admin', // Admin-created notification
+    };
+    
+    if (sendTo) {
+      pushNotifData.sendTo = JSON.stringify(sendTo);
+    }
+    
+    if (image) {
+      pushNotifData.image = image;
+    }
+
+    const pushNotif = await pushNotification.create(pushNotifData, { transaction });
+
+    // For custom admin notifications, we only store in pushNotification table
+    // No need to create individual userNotification entries
+
+    return pushNotif;
+  };
+
+  /**
+   * Create auto-triggered notification (backend system notifications)
+   */
+  public createAutoNotification = async (data: {
+    title: string;
+    body: string;
+    sendTo?: any; // JSON array of user IDs or specific targets
+    isSendToAll?: boolean;
+    image?: string;
+    transaction?: Transaction;
+  }): Promise<any> => {
+    const { title, body, sendTo, isSendToAll = false, image, transaction } = data;
+
+    // Create entry in pushNotification table
+    const pushNotifData: any = {
+      sendBy: 1, // System admin ID for auto notifications
+      title,
+      body,
+      isSendToAll,
+      notificationType: 'auto', // Auto-triggered notification
     };
     
     if (sendTo) {
@@ -308,7 +346,7 @@ export class NotificationService {
         await this.createNotification({
           userId: notificationUserId,
           employeeId: notificationEmployeeId,
-          adminId: sendBy,
+          adminId: 1, // System admin ID
           typeId: 14, // Custom Notification
           title,
           content: body,
@@ -408,23 +446,42 @@ export class NotificationService {
 
     const notificationData = originalNotification.get({ plain: true });
 
+    // Parse sendTo if it's a JSON string
+    let parsedSendTo = notificationData.sendTo;
+    if (typeof notificationData.sendTo === 'string') {
+      try {
+        parsedSendTo = JSON.parse(notificationData.sendTo);
+      } catch (error) {
+        console.error("Error parsing sendTo:", error);
+      }
+    }
+
     // Re-send the notification using existing sendPushNotifications logic
-    const resendData = {
+    const resendData: any = {
       sendBy: adminId,
       title: notificationData.title || "Notification",
       body: notificationData.body || "Notification content",
-      sendTo: notificationData.sendTo,
+      sendTo: notificationData.sendTo, // Keep original format for DB
       isSendToAll: notificationData.isSendToAll || false,
-      image: notificationData.image
+      notificationType: notificationData.notificationType || 'admin'
     };
+
+    // Include image if it exists
+    if (notificationData.image) {
+      resendData.image = notificationData.image;
+    }
 
     // Create a new notification entry
     const newNotification = await pushNotification.create(resendData, { transaction });
 
-    // Send push notifications to users
+    // Send push notifications to users (use parsed sendTo)
     await this.sendPushNotificationsToUsers({
-      ...resendData,
-      image: resendData.image || undefined
+      sendBy: adminId,
+      title: resendData.title,
+      body: resendData.body,
+      sendTo: parsedSendTo, // Use parsed array for sending
+      isSendToAll: resendData.isSendToAll,
+      image: resendData.image
     });
 
     return {
@@ -682,159 +739,6 @@ export class NotificationService {
     return res;
   };
 
-  public updateNotification = async (
-    data: any,
-    transaction: Transaction
-  ): Promise<any> => {
-    const {
-      notificationId,
-      userId,
-      typeId,
-      profileStatus,
-      adminId,
-      rejectionReason,
-      empCompanyId,
-    } = data;
-
-    const isApproved = profileStatus === 3;
-    const statusKey = isApproved ? 1 : 2;
-    const isApprovedStatus = isApproved ? true : false;
-    const approvedByField = isApproved ? 'approvedBy' : "rejectedBy";
-    const approvedOnField = isApproved ? 'approvedOn' : "rejectedOn";
-    const sendToId = isApproved ? empCompanyId : userId;
-    const notificationStatus = isApproved ? "Goedgekeurd" : "Afgewezen";
-    const notificationbody = isApproved ? "Uw account is succesvol goedgekeurd." : `Uw account is afgewezen vanwege ${rejectionReason}`;
-    const statusValue = isApproved ? "approved" : "decline";
-    var userName: string = "";
-    var userData: any;
-    // const userNotificationTypeId = isApproved ? 1 : 2;
-
-    // Update notification status
-    await notifications.update(
-      { seen: true, StatusKey: statusKey, Status: statusValue },
-      { where: { id: notificationId }, transaction }
-    );
-
-    // Update profile status based on typeId
-    const updateData = { profileStatus };
-
-    if (typeId === 1 || typeId === 3) {
-      userData = await users.findOne({
-        where: { id: userId }, attributes: ['fcmToken', "email", "name"], include: [{
-          as: "roleData",
-          model: roleData,
-          attributes: ["companyName", "firstName", "lastName"]
-        }]
-      })
-      if (userData.roleData.companyName) {
-        userName = userData.roleData.companyName
-      } else {
-        userName = `${userData.roleData.firstName} ${userData.roleData.lastName}`
-      }
-
-      await users.update(updateData, {
-        where: {
-          id: userId,
-          rejectionReason: rejectionReason ? rejectionReason : "",
-        },
-        transaction,
-      });
-
-      await roleData.update(
-        { isApproved: isApprovedStatus },
-        { where: { userId: userId }, transaction }
-      );
-
-      await userLog.create(
-        {
-          userId: userId,
-          isApproved: profileStatus == 3 ? true : false,
-          rejectedReason: rejectionReason ? rejectionReason : "",
-          [approvedByField]: adminId,
-          [approvedOnField]: new Date(),
-        },
-        { transaction }
-      );
-    } else if (typeId === 2) {
-      userData = await employee.findOne({
-        where: { id: userId }, attributes: ['fcmToken', 'firstName', 'lastName', "email"], include: [{
-          as: "users", model: users, attributes: ["fcmToken"]
-        }]
-
-      })
-      userName = `${userData.firstName} ${userData.lastName}`
-      const notificationbodyEmp = isApproved ? "Uw account is succesvol goedgekeurd." : `Employee ( ${userData.firstName} ${userData.lastName} ) wordt afgewezen vanwege ${rejectionReason}.`;
-
-      await employee.update(
-        {
-          ...updateData,
-          isApproved: isApprovedStatus,
-          rejectionReason: rejectionReason ? rejectionReason : "",
-        },
-        { where: { id: userId }, transaction }
-      );
-      const pushRes: any = await sendPushNotification(
-        userData.users.fcmToken,
-        notificationStatus || "Test Notification",
-        notificationbodyEmp || "This is a test message, Take care.",
-        ""
-      );
-
-      // if (pushRes) {
-      // await pushNotification.create({
-      //   sendBy: adminId,
-      //   title: notificationStatus,
-      //   body: notificationbody,
-      //   sendTo: sendToId,
-      //   isSendToAll: false,
-      //   // image: null,
-      // });
-      return;
-    }
-
-    if (userData.fcmToken) {
-      const pushRes: any = await sendPushNotification(
-        userData.fcmToken,
-        notificationStatus || "Test Notification",
-        notificationbody || "This is a test message, Take care.",
-        ""
-      );
-
-      // if (pushRes) {
-      // await pushNotification.create({
-      //   sendBy: adminId,
-      //   title: notificationStatus,
-      //   body: notificationbody,
-      //   sendTo: sendToId,
-      //   isSendToAll: false,
-      //   // image: null,
-      // });
-
-      var emailHtml: any;
-      var subject: any;
-      if (isApproved) {
-        emailHtml = getProcessedTemplate("approved_by_admin", { username: userName });
-        subject = 'Profiel goedgekeurd.';
-      } else {
-        emailHtml = getProcessedTemplate("rejected_by admin", { username: userName, reason: rejectionReason });
-        subject = 'Profiel afgewezen.';
-
-      }
-
-      const isEmailSend: any = await sendEmail({
-        from: String(process.env.EMAIL),
-        to: userData.email,
-        subject: subject,
-        html: emailHtml, // Use processed HTML
-      });
-
-      if (!isEmailSend) {
-        throw new Error("Fout bij het verzenden van een e-mail.")
-      }
-    }
-
-
-  };
 
   public getUserReportInfoById = async (data: any): Promise<any> => {
     const { reportId } = data;
@@ -1057,45 +961,6 @@ export class NotificationService {
     return resp;
   };
 
-  public viewPreviousNotification = async (data: any): Promise<any> => {
-    const res: any = await notifications.findAndCountAll({
-      where: { seen: true, StatusKey: 1 },
-      order: [["createdAt", "desc"]],
-      attributes: {
-        exclude: [
-          "deletedBy",
-          "updatedAt",
-          "updatedBy",
-          "deletedAt",
-          "seen",
-          "contentDE",
-        ],
-      },
-      include: [
-        {
-          as: "report",
-          model: report,
-          attributes: ["reportedThreadId", "reportedP_ThreadId", "problem"],
-        },
-        {
-          as: "users",
-          model: users,
-          attributes: ["id", "roleId", "name"],
-        },
-        {
-          as: "employee",
-          model: employee,
-          attributes: [
-            "id",
-            [Sequelize.literal("3"), "roleId"],
-            "firstName",
-            "lastName",
-          ],
-        },
-      ],
-    });
-    return res;
-  };
 
   public getNotificationById = async (data: any): Promise<any> => {
     const { userId, roleId } = data;

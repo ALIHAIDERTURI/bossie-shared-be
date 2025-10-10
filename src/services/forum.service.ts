@@ -10,7 +10,6 @@ import {
   messages,
   employee,
   report,
-  notifications,
   userNotification,
   threadLog,
   bannedKeywords,
@@ -932,7 +931,7 @@ export class ForumService {
       typeId, // report notification
     };
 
-    await notifications.create({ ...notificationData }, { transaction });
+    await userNotification.create({ ...notificationData }, { transaction });
   };
 
 
@@ -1528,7 +1527,7 @@ public async deleteOrHidePost(
   }
 
   // Notify thread owner (for both delete & hide)
-  await notifications.create({
+  await userNotification.create({
     userId: thread.ownerId,
     content: `Your Post "${thread.title}" was ${action}d by an admin. Reason: ${reason}`,
     StatusKey: 1, // unread/new

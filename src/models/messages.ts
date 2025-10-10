@@ -28,6 +28,9 @@ export interface messagesI {
   hiddenBy?: number | null;
   isDeleted?: boolean;
   deletedBy?: number | null;
+  isAdmin?: boolean;
+  isSpam?: boolean;
+
 }
 
 @Table({
@@ -98,4 +101,12 @@ export class messages extends Model<messagesI> {
   @Column(DataType.INTEGER)
   public deletedBy: number | null;
 
+  @Column(DataType.BOOLEAN)
+  public isAdmin: boolean;
+
+  @Column({
+    type: DataType.BOOLEAN,
+    defaultValue: false,
+  })
+  public isSpam: boolean;
 }

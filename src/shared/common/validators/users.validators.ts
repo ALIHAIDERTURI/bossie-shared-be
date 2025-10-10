@@ -179,3 +179,16 @@ export const sendPushNotificationsSchema = Joi.object({
     "string.base": "Image must be a string",
   }),
 });
+
+export const getAllCombineUsersSchema = Joi.object({
+  name: Joi.string().optional(),
+  filters: Joi.object({
+    roleId: Joi.string().optional(), // "1,2,3" for multiple selections
+    accountStatus: Joi.string().optional(), // "1,2,3,4" for multiple selections
+    profileStatus: Joi.string().optional(), // "2,3" for multiple selections
+    currentMonth: Joi.boolean().optional(), // Filter by current month registration
+    lastLogin: Joi.string().optional(), // "today,week,month,quarter"
+    industryId: Joi.string().optional(), // "1,2,3" for multiple industries
+    userName: Joi.string().optional(), // Search by display name
+  }).optional(),
+});

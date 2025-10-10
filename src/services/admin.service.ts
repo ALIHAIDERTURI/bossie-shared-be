@@ -8,7 +8,6 @@ import {
   forumSubCategory,
   like,
   messages,
-  notifications,
   privateMessages,
   privateThreads,
   report,
@@ -3035,7 +3034,7 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
     if (res) {
       const resData = res.get({ plain: true });
 
-      await notifications.update(
+      await userNotification.update(
         { seen: true },
         { where: { reportId: resData.id, typeId: 5 }, transaction }
       );
@@ -4448,7 +4447,7 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
     transaction: Transaction
   ): Promise<any> => {
     const { reportId } = data;
-    await notifications.destroy({ where: { reportId: reportId }, transaction });
+    await userNotification.destroy({ where: { reportId: reportId }, transaction });
     await report.destroy({ where: { id: reportId }, transaction });
   };
 
@@ -4580,7 +4579,7 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
       if (res) {
         const resData = res.get({ plain: true });
 
-        await notifications.update(
+        await userNotification.update(
           { seen: true },
           { where: { reportId: resData.id, typeId: 6 }, transaction }
         );
@@ -4749,7 +4748,7 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
 
     // Validate thread exists
     const threadExists = await threads.findOne({
-      where: { id: forumId, deletedAt: null }
+      where: { id: forumId }
     });
     if (!threadExists) {
       throw new Error("Forum thread not found");
@@ -4941,14 +4940,14 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
       forumCategory.count(),
       threads.count(),
       report.count(),
-      notifications.count({ where: { typeId: 4, seen: false } }),
-      notifications.count({
+      userNotification.count({ where: { typeId: 4, seen: false } }),
+      userNotification.count({
         where: { typeId: { [Op.in]: [1, 2, 3] }, seen: false },
       }),
-      notifications.count({
+      userNotification.count({
         where: { typeId: { [Op.in]: [5, 6, 7] }, seen: false },
       }),
-      notifications.count({
+      userNotification.count({
         where: { typeId: { [Op.in]: [5, 6, 7] }, seen: true },
       }),
     ]);
@@ -7488,45 +7487,49 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
   };
 
   public getUserThreads = async (data: any): Promise<any> => {
-    const { userId, roleId, limit = 10, offset = 0 } = data;
+    const { userId } = data;
 
-    // Check if user exists based on role
-    if (roleId === 3) {
-      // Check if employee exists
-      const employeeExists = await employee.findOne({
-        where: { id: userId, deletedAt: null }
-      });
-      if (!employeeExists) {
-        throw new Error("Employee not found");
-      }
-    } else {
-      // Check if user exists
-      const userExists = await users.findOne({
-        where: { id: userId, deletedAt: null }
-      });
-      if (!userExists) {
-        throw new Error("User not found");
-      }
-    }
+    // // First, try to find the user in the users table
+    // let userRecord = await users.findOne({
+    //   where: { id: userId, deletedAt: null },
+    //   attributes: ['id', 'roleId']
+    // });
 
-    // Get threads where user is the owner
-    const whereClause: any = {
-      roleId: roleId,
-      deletedAt: null
-    };
+    // let roleId: number;
+
+    // if (userRecord) {
+    //   // User found in users table
+    //   roleId = userRecord.roleId;
+    // } else {
+    //   // If not found in users table, check if it's an employee
+    //   const employeeRecord = await employee.findOne({
+    //     where: { id: userId, deletedAt: null },
+    //     attributes: ['id']
+    //   });
+      
+    //   if (!employeeRecord) {
+    //     throw new Error("User not found");
+    //   }
+      
+    //   // Employee found
+    //   roleId = 3;
+    // }
+
+    // // Get threads where user is the owner
+    // const whereClause: any = {
+    //   deletedAt: null
+    // };
     
-    if (roleId === 3) {
-      // For employees: check ownerEmpId and ensure ownerId is null/0
-      whereClause.ownerEmpId = userId;
-      whereClause.ownerId = { [Op.or]: [null, 0] };
-    } else {
-      // For users: check ownerId and ensure ownerEmpId is null/0
-      whereClause.ownerId = userId;
-      whereClause.ownerEmpId = { [Op.or]: [null, 0] };
-    }
+    // if (roleId === 3) {
+    //   // For employees: check ownerEmpId
+    //   whereClause.ownerEmpId = userId;
+    // } else {
+    //   // For users: check ownerId
+    //   whereClause.ownerId = userId;
+    // }
 
     const ownedThreads = await threads.findAll({
-      where: whereClause,
+      where: {ownerId: userId},
       attributes: [
         "id",
         "title",
@@ -7554,54 +7557,7 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
       order: [["createdAt", "DESC"]]
     });
 
-    // Get threads where user has sent messages
-    const participatedThreads = await threads.findAll({
-      where: {
-        id: {
-          [Op.in]: Sequelize.literal(`(
-            SELECT DISTINCT roomId 
-            FROM messages 
-            WHERE userId = ${userId} 
-            AND roleId = ${roleId}
-            AND deletedAt IS NULL
-          )`)
-        },
-        roleId: roleId,
-        deletedAt: null
-      },
-      attributes: [
-        "id",
-        "title",
-        "description",
-        "categoryId",
-        "subCategoryId",
-        "locked",
-        "createdAt",
-        "updatedAt"
-      ],
-      include: [
-        {
-          model: forumCategory,
-          as: "forumCategory",
-          attributes: ["name"],
-          required: false
-        },
-        {
-          model: forumSubCategory,
-          as: "forumSubCategory",
-          attributes: ["name"],
-          required: false
-        }
-      ],
-      order: [["createdAt", "DESC"]]
-    });
-
-    const allThreads = [...ownedThreads, ...participatedThreads];
-    const uniqueThreads = allThreads.filter((thread, index, self) =>
-      index === self.findIndex(t => t.id === thread.id)
-    );
-    const paginatedThreads = uniqueThreads.slice(offset * limit, (offset + 1) * limit);
-    const formattedThreads = paginatedThreads.map((thread: any) => ({
+    const formattedThreads = ownedThreads.map((thread: any) => ({
       threadId: thread.id,
       threadName: thread.title,
       threadPath: thread.forumCategory?.name && thread.forumSubCategory?.name
@@ -7611,14 +7567,12 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
 
     return {
       threads: formattedThreads,
-      total: uniqueThreads.length,
-      limit: limit,
-      offset: offset
+      total: formattedThreads.length
     };
   };
 
   public getCompanyThreads = async (data: { companyId: number, limit?: number, offset?: number }): Promise<any> => {
-  const { companyId, limit = 10, offset = 0 } = data;
+  const { companyId } = data;
 
   // Check if company exists
   const companyExists = await users.findOne({
@@ -7661,54 +7615,11 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
     order: [["createdAt", "DESC"]]
   });
 
-  // Get threads where company has sent messages
-  const participatedThreads = await threads.findAll({
-    where: {
-      id: {
-        [Op.in]: Sequelize.literal(`(
-          SELECT DISTINCT roomId 
-          FROM messages 
-          WHERE userId = ${companyId} 
-          AND deletedAt IS NULL
-        )`)
-      },
-      deletedAt: null
-    },
-    attributes: [
-      "id",
-      "title",
-      "description",
-      "categoryId",
-      "subCategoryId",
-      "locked",
-      "createdAt",
-      "updatedAt"
-    ],
-    include: [
-      {
-        model: forumCategory,
-        as: "forumCategory",
-        attributes: ["name"],
-        required: false
-      },
-      {
-        model: forumSubCategory,
-        as: "forumSubCategory",
-        attributes: ["name"],
-        required: false
-      }
-    ],
-    order: [["createdAt", "DESC"]]
-  });
+  // const uniqueThreads = ownedThreads.filter((thread, index, self) =>
+  //   index === self.findIndex(t => t.id === thread.id)
+  // );
 
-  const allThreads = [...ownedThreads, ...participatedThreads];
-  const uniqueThreads = allThreads.filter((thread, index, self) =>
-    index === self.findIndex(t => t.id === thread.id)
-  );
-
-  const paginatedThreads = uniqueThreads.slice(offset * limit, (offset + 1) * limit);
-
-  const formattedThreads = paginatedThreads.map(thread => ({
+  const formattedThreads = ownedThreads.map(thread => ({
     threadId: thread.id,
     threadName: thread.title,
     threadPath: thread.forumCategory?.name && thread.forumSubCategory?.name
@@ -7718,9 +7629,7 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
 
   return {
     threads: formattedThreads,
-    total: uniqueThreads.length,
-    limit,
-    offset
+    total: ownedThreads.length
   };
 };
 

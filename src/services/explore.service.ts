@@ -2,7 +2,7 @@ import {
   employee,
   industry,
   like,
-  notifications,
+  userNotification,
   report,
   roleData,
   users,
@@ -497,6 +497,6 @@ export class ExploreService {
       seen: 0,
       typeId: 5, //report notification
     };
-    await notifications.create({ ...obj }, { transaction });
+    await userNotification.create({ ...obj }, { transaction });
   };
 }

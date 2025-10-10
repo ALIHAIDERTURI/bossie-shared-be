@@ -9,6 +9,7 @@ import {
   createProfileSchema,
   defaultSchema,
   forgotPasswordSchema,
+  getAllCombineUsersSchema,
   getAppStatusSchema,
   getProfileSchema,
   getUserByIdSchema,
@@ -559,7 +560,8 @@ export class UserController {
     try {
       const { query } = req;
       let message = "Data fetched successfully.";
-      const response: any = await this.__service.getAllCombineUsers(query);
+      const data = await getAllCombineUsersSchema.validateAsync(query);
+      const response: any = await this.__service.getAllCombineUsers(data);
 
       res.status(200).json({
         statusCode: 200,

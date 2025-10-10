@@ -4,7 +4,6 @@ import {
   adminLog,
   duplicateData,
   employee,
-  notifications,
   pushNotification,
   roleData,
   userLog,
@@ -952,7 +951,7 @@ export class RequestService {
       { transaction }
     );
 
-    await notifications.update(
+    await userNotification.update(
       { seen: true },
       {
         where: { seen: false, [roleType]: userId },

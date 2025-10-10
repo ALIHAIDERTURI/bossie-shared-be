@@ -2,7 +2,6 @@ import {
   users,
   roleData,
   employee,
-  notifications,
   forumCategory,
   forumSubCategory,
   threads,
@@ -31,7 +30,6 @@ type ModelType = any;
 export * from "./users";
 export * from "./roleData";
 export * from "./employee";
-export * from "./notifications";
 export * from "./forumCategory";
 export * from "./forumSubCategory";
 export * from "./threads";
@@ -58,7 +56,6 @@ export const models: ModelType = [
   users,
   roleData,
   employee,
-  notifications,
   forumCategory,
   forumSubCategory,
   threads,

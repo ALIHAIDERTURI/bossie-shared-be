@@ -11,3 +11,9 @@ DROP TABLE IF EXISTS notifications;
 -- ALTER TABLE users 
 -- ADD CONSTRAINT users_ibfk_1 
 -- FOREIGN KEY (rejectedBy) REFERENCES admin(id);
+
+-- Remove notifications table from database
+DROP TABLE IF EXISTS notifications;
+
+-- Clear all entries from pushNotification table
+DELETE FROM pushNotification;

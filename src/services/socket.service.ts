@@ -9,11 +9,37 @@ import {
   threads,
   userNotification,
   users,
+  bannedKeywords,
 } from "@src/models";
 import { sendPushNotification } from "@src/utils/pushNotification";
 import { Op, Sequelize, Transaction } from "sequelize";
 
 export class SocketService {
+  private async checkForBannedKeywords(message: string): Promise<boolean> {
+    try {
+      if (!message) {
+        return false;
+      }
+
+      // Fetch latest banned keywords from database
+      const keywords = await bannedKeywords.findAll({
+        attributes: ["keyword"],
+        raw: true,
+      });
+
+      if (keywords.length === 0) {
+        return false;
+      }
+
+      const lowerMessage = message.toLowerCase();
+      const bannedKeywordsList = keywords.map((k: any) => k.keyword.toLowerCase());
+      
+      return bannedKeywordsList.some(keyword => lowerMessage.includes(keyword));
+    } catch (error) {
+      console.error("Error checking banned keywords:", error);
+      return false;
+    }
+  }
   public joinRoom = async (io: any, socket: any, data: any): Promise<any> => {
     const { id, userId, userName } = data;
     console.log("in join room");
@@ -24,7 +50,7 @@ export class SocketService {
     const allMessage: any = await messages.findAll({
       where: { 
         roomId: id,
-        isDeleted: false // Exclude deleted messages
+        // isDeleted: false // Exclude deleted messages
       },
       order: [["createdAt", "desc"]],
       include: [
@@ -77,48 +103,34 @@ export class SocketService {
 
     const filteredMessages = await Promise.all(
       allMessage.map(async (msg: any) => {
-        let employeeInfo: any;
-        // if (msg.roleId === 3) {
-        //   employeeInfo = await employee.findOne({
-        //     where: { id: msg.userId },
-        //     attributes: ["firstName", "lastName", "profile", "id"],
-        //   });
-        // }
-        
-        // Check if this message is from an admin
-        const isAdminMessage = await admin.findOne({
-          where: { id: msg.userId, deletedAt: null },
-          attributes: ["id", "name", "adminRoleId"],
-          raw: true
-        });
-
         let name: any;
-        let isAdmin = false;
-        let adminId = null;
-        let adminName = null;
-        let adminRoleId = null;
-
-        if (isAdminMessage) {
-          // This is an admin message
-          name = isAdminMessage.name;
-          isAdmin = true;
-          adminId = isAdminMessage.id;
-          adminName = isAdminMessage.name;
-          adminRoleId = isAdminMessage.adminRoleId;
-        } else if (msg.roleId == 2) {
-          name = msg.users?.roleData?.companyName;
-        } else if (msg.roleId == 1) {
-          name = `${msg.users?.roleData?.firstName} ${msg.users?.roleData?.lastName}`;
+        let adminDetails;
+        
+        if (msg.isAdmin) {
+          // This is an admin message - get admin details
+          adminDetails = await admin.findOne({
+            where: { id: msg.userId },
+            attributes: ["id", "name", "adminRoleId"],
+            raw: true
+          });
+          name = adminDetails?.name
         } else {
-          name = `${msg.employee?.firstName} ${msg.employee?.lastName}`;
+          // Regular user message
+          if (msg.roleId == 2) {
+            name = msg.users?.roleData?.companyName;
+          } else if (msg.roleId == 1) {
+            name = `${msg.users?.roleData?.firstName} ${msg.users?.roleData?.lastName}`;
+          } else {
+            name = `${msg.employee?.firstName} ${msg.employee?.lastName}`;
+          }
         }
 
         return {
           messageId: msg.id,
-          userId: isAdminMessage ? isAdminMessage.id : (msg.roleId !== 3 ? msg.users?.id : msg.employee?.id),
-          roleId: isAdminMessage ? 999 : msg.roleId, // Keep original logic
+          userId: msg.isAdmin ? adminDetails?.id : msg.roleId !== 3 ? msg.users?.id : msg.employee?.id,
+          roleId: msg.roleId,
           name: name,
-          userLogo: isAdminMessage ? null : (msg.roleId !== 3 ? msg.users?.roleData?.profile : msg.employee?.profile),
+          userLogo: msg.isAdmin ? null : (msg.roleId !== 3 ? (msg.users?.roleData?.profile || null) : (msg.employee?.profile || null)),
           roomId: msg.roomId,
           roomName: isRoom.title,
           message: msg.message,
@@ -126,9 +138,8 @@ export class SocketService {
           timeStamp: msg.createdAt,
           isHidden: msg.isHidden || false,
           isDeleted: msg.isDeleted || false,
-          isAdmin: isAdmin,
-          adminId: adminId,
-          adminName: adminName,
+          isAdmin: msg.isAdmin || false,
+          isSpam: msg.isSpam || false
         };
       })
     );
@@ -145,7 +156,7 @@ export class SocketService {
     data: any,
     transaction: Transaction
   ): Promise<any> => {
-    const { userId, roomId, message, roleId, img, adminId, isAdmin } = data;
+    const { userId, roomId, message, roleId, img, adminId, isAdmin = false, isHidden = false, isDeleted = false } = data;
     let messageCreate: any
     console.log("in sending msg service");
     const roomExist: any = await threads.findOne({
@@ -157,17 +168,15 @@ export class SocketService {
       throw new Error("Er is geen kamer beschikbaar.");
     }
     if (!roomExist.locked) {
-      // First, check if the user is an admin
-      const isUserAdmin = await admin.findOne({
-        where: { id: userId, deletedAt: null },
-        attributes: ["id", "name", "adminRoleId"],
-        raw: true
-      });
 
-      const userColName = roleId == 3 ? "empId" : "userId";
+
+      const userColName = roleId === 3 ? "empId" : "userId";
+
+      // Check if message contains banned keywords (fetches latest from DB)
+      const isSpam = await this.checkForBannedKeywords(message);
 
       messageCreate = await messages.create(
-        { [userColName]: userId, roomId, message, roleId, img },
+        { [userColName]: userId, roomId, message, roleId, img, isAdmin, isHidden, isDeleted, isSpam },
         { transaction }
       );
 
@@ -175,25 +184,29 @@ export class SocketService {
         throw new Error("Bericht kan niet worden gemaakt.");
       }
 
-      // Handle admin messages (either explicitly marked as admin or detected as admin)
-      if ((isAdmin && adminId) || isUserAdmin) {
+      // Check if user is admin using payload fields - default isAdmin to false
+      if (isAdmin) {
         console.log("in send msg , admin condition");
         
-        const adminResponse = isUserAdmin || await admin.findOne({
-          where: { id: adminId || userId }, 
+        // Use adminId if provided, otherwise use userId
+        const adminIdToUse = adminId || userId;
+        
+        // Get admin details
+        const adminDetails = await admin.findOne({
+          where: { id: adminIdToUse, deletedAt: null },
           attributes: ["id", "name", "adminRoleId"],
           raw: true
         });
 
-        if (!adminResponse) {
-          throw new Error("Admin not found.");
+        if (!adminDetails) {
+          throw new Error("Admin not found");
         }
-
+        
         io.to(roomId).emit("message", {
           messageId: messageCreate.id,
-          userId: adminResponse.id,
-          roleId: 999, // Keep original special roleId for admin
-          name: adminResponse.name,
+          userId: adminDetails.id,
+          roleId: null, // Keep original special roleId for admin
+          name: null, // Admin name is in adminName field
           userLogo: null, // Admins don't have profile images
           roomId,
           roomName: roomExist.title,
@@ -203,11 +216,12 @@ export class SocketService {
           isHidden: false,
           isDeleted: false,
           isAdmin: true,
-          adminId: adminResponse.id,
-          adminName: adminResponse.name,
+          isSpam: isSpam,
+          adminId: adminDetails.id,
+          adminName: adminDetails.name,
         });
 
-      } else if (roleId != 3) {
+      } else if (roleId !== 3) {
         // Handle regular users (freelancers and companies)
         const userResponse: any = await users.findOne({
           where: { id: userId },
@@ -232,7 +246,7 @@ export class SocketService {
              roleId == 2
                ? `${userResponse?.roleData?.companyName}`
                : `${userResponse?.roleData?.firstName} ${userResponse?.roleData?.lastName}`,
-           userLogo: userResponse?.roleData?.profile,
+           userLogo: userResponse?.roleData?.profile || null,
            roomId,
            roomName: roomExist.title,
            message,
@@ -241,6 +255,9 @@ export class SocketService {
            isHidden: false,
            isDeleted: false,
            isAdmin: false,
+           isSpam: isSpam,
+           adminId: null,
+           adminName: null,
          });
       } else {
         // Handle employees
@@ -262,7 +279,7 @@ export class SocketService {
            userId,
            roleId: roleId,
            name: `${userResponse.firstName} ${userResponse.lastName}`,
-           userLogo: userResponse.profile,
+           userLogo: userResponse.profile || null,
            roomId,
            roomName: roomExist.title,
            message,
@@ -271,6 +288,9 @@ export class SocketService {
            isHidden: false,
            isDeleted: false,
            isAdmin: false,
+           isSpam: isSpam,
+           adminId: null,
+           adminName: null,
          });
       }
 
@@ -325,7 +345,7 @@ export class SocketService {
     }
 
     await message.update(
-      { isHidden: false, hiddenBy: null },
+      { isHidden: false, hiddenBy: null, isSpam: false },
       { transaction }
     );
 

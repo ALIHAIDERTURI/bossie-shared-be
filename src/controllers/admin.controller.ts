@@ -1185,12 +1185,8 @@ export class AdminController {
     try {
       let message = "User threads fetched successfully.";
       const { userId } = req.params;
-      const { limit = 10, offset = 0, roleId } = req.query;
       const data = { 
-        userId: parseInt(userId), 
-        roleId: parseInt(roleId as string),
-        limit: parseInt(limit as string), 
-        offset: parseInt(offset as string) 
+        userId: parseInt(userId)
       };
       const response: any = await this.__service.getUserThreads(data);
 

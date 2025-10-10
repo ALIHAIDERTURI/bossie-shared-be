@@ -11,7 +11,7 @@ import {
   Table,
 } from "sequelize-typescript";
 import { roleData } from "./roleData";
-import { notifications } from "./notifications";
+import { userNotification } from "./userNotification";
 import { threads } from "./threads";
 import { like } from "./like";
 import { privateThreads } from "./privateThreads";
@@ -58,8 +58,8 @@ export interface userI {
   timestamps: true,
 })
 export class users extends Model<userI> {
-  @HasMany((): typeof notifications => notifications, { foreignKey: 'userId' })
-  public notifications: typeof notifications;
+  @HasMany((): typeof userNotification => userNotification, { foreignKey: 'userId' })
+  public userNotification: typeof userNotification;
 
   @HasMany((): typeof userLog => userLog)
   public userLog: typeof userLog;

@@ -49,7 +49,7 @@ export class SocketController {
       const transaction = await sequelize.transaction();
       try {
         let message = "Message send successfully.";
-        const body = await sendMessageSchema.validateAsync(data);
+      const body = await sendMessageSchema.validateAsync(data);
         const response: any = await this.__service.sendMessage(
           socket,
           io,

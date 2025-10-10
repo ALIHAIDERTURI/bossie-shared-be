@@ -8,7 +8,6 @@ import {
   employee,
   industry,
   like,
-  notifications,
   pushNotification,
   roleData,
   userLog,
@@ -770,7 +769,7 @@ export class UserService {
         seen: 0,
         typeId: typeId, //company notification
       };
-      await notifications.create({ ...obj }, { transaction });
+      await userNotification.create({ ...obj }, { transaction });
     }
 
     await users.update(
@@ -884,7 +883,7 @@ export class UserService {
       seen: 0,
       typeId: 2, //company notification
     };
-    await notifications.create({ ...obj }, { transaction });
+    await userNotification.create({ ...obj }, { transaction });
 
     const emailHtml = getProcessedTemplate("employee_add", { employee_username: `${data.firstName} ${data.lastName}`, password: password, email: email, company_name: isUserExist.roleData.companyName });
 
@@ -1806,7 +1805,7 @@ export class UserService {
         seen: 0,
         typeId: 4, //update Info notification
       };
-      await notifications.create({ ...obj }, { transaction });
+      await userNotification.create({ ...obj }, { transaction });
     }
   };
 
@@ -2288,19 +2287,18 @@ export class UserService {
             body || "This is a test message, Take care.",
             image
           );
-
-          // if (pushRes) {
-          await pushNotification.create({
-            sendBy,
-            title,
-            body,
-            sendTo,
-            isSendToAll,
-            image,
-          });
-          // }
         })
       );
+
+      // Create only ONE notification entry for selected users
+      await pushNotification.create({
+        sendBy,
+        title,
+        body,
+        sendTo,
+        isSendToAll,
+        image,
+      });
 
     }
 
@@ -2324,95 +2322,223 @@ export class UserService {
   };
 
   public getAllCombineUsers = async (data: any): Promise<any> => {
-    const { name } = data;
+    const { name, filters } = data;
 
-    // Modify the search term for partial matching (like %name%)
-    const searchTerm = name ? `%${name}%` : null;
+    // Build where conditions for users
+    const userWhereConditions: any = {};
+    const roleDataWhereConditions: any = {};
+    const employeeWhereConditions: any = {};
+
+    // 1. Filter by roleId (Individual: 1, Company: 2, Employee: 3)
+    if (filters?.roleId) {
+      const roleIds = filters.roleId.split(',').map((id: string) => parseInt(id.trim()));
+      if (roleIds.includes(3)) {
+        // If employee role is selected, we'll handle employees separately
+        userWhereConditions.roleId = { [Op.in]: roleIds.filter((id: number) => id !== 3) };
+        if (userWhereConditions.roleId[Op.in].length === 0) {
+          delete userWhereConditions.roleId;
+        }
+      } else {
+        userWhereConditions.roleId = { [Op.in]: roleIds };
+      }
+    }
+
+    // 2. Filter by accountStatus (Available for Chat: 1, Not Available: 2, Suspended: 3, Muted: 4)
+    if (filters?.accountStatus) {
+      const accountStatuses = filters.accountStatus.split(',').map((status: string) => parseInt(status.trim()));
+      roleDataWhereConditions.accountStatus = { [Op.in]: accountStatuses };
+    }
+
+    // 3. Filter by profileStatus (Approved: 3, Pending Approval: 2)
+    if (filters?.profileStatus) {
+      const profileStatuses = filters.profileStatus.split(',').map((status: string) => parseInt(status.trim()));
+      userWhereConditions.profileStatus = { [Op.in]: profileStatuses };
+    }
+
+    // 4. Filter by current month registration
+    if (filters?.currentMonth) {
+      const currentDate = new Date();
+      const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+      const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+      userWhereConditions.createdAt = {
+        [Op.between]: [startOfMonth, endOfMonth]
+      };
+    }
+
+    // 5. Filter by lastLogin (today, week, month, quarter)
+    if (filters?.lastLogin) {
+      const now = new Date();
+      let startDate: Date;
+      
+      switch (filters.lastLogin) {
+        case 'today':
+          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          break;
+        case 'week':
+          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          break;
+        case 'month':
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+          break;
+        case 'quarter':
+          const quarterStartMonth = Math.floor(now.getMonth() / 3) * 3;
+          startDate = new Date(now.getFullYear(), quarterStartMonth, 1);
+          break;
+        default:
+          startDate = new Date(0);
+      }
+      
+      userWhereConditions.lastLogin = {
+        [Op.gte]: startDate
+      };
+    }
+
+    // 6. Filter by industryId
+    if (filters?.industryId) {
+      const industryIds = filters.industryId.split(',').map((id: string) => parseInt(id.trim()));
+      roleDataWhereConditions.industryId = { [Op.in]: industryIds };
+    }
+
+    // 7. Search by display name (using the getDisplayName logic)
+    let searchTerm = null;
+    if (name) {
+      searchTerm = `%${name}%`;
+    }
+    if (filters?.userName) {
+      searchTerm = `%${filters.userName}%`;
+    }
+
+    if (searchTerm) {
+      roleDataWhereConditions[Op.or] = [
+        { firstName: { [Op.like]: searchTerm } },
+        { lastName: { [Op.like]: searchTerm } },
+        { companyName: { [Op.like]: searchTerm } }
+      ];
+    }
 
     // Fetch users data
     const userData: any = await users.findAndCountAll({
-      attributes: ["id", "roleId", "name"],
+      attributes: ["id", "roleId", "name", "profileStatus", "lastLogin", "createdAt"],
+      where: userWhereConditions,
       order: [["createdAt", "DESC"]],
       include: [
         {
           as: "roleData",
           model: roleData,
-          attributes: ["id", "firstName", "lastName", "profile", "companyName"],
-          // Conditional where clause for partial name search
-          where: searchTerm
-            ? {
-              [Op.or]: {
-                firstName: { [Op.like]: searchTerm },
-                lastName: { [Op.like]: searchTerm },
-                companyName: { [Op.like]: searchTerm },
-              },
-            }
-            : undefined, // No where clause if searchTerm is undefined
+          attributes: ["id", "firstName", "lastName", "profile", "companyName", "accountStatus", "industryId"],
+          where: Object.keys(roleDataWhereConditions).length > 0 ? roleDataWhereConditions : undefined,
         },
       ],
     });
 
-    console.log("userData", userData);
-
     // Fetch employee data
-    const empData: any = await employee.findAndCountAll({
-      attributes: ["id", "firstName", "lastName", "profile"],
-      // Conditional where clause for partial employee name search
-      where: searchTerm
-        ? {
-          [Op.or]: {
-            firstName: { [Op.like]: searchTerm },
-            lastName: { [Op.like]: searchTerm },
-          },
-        }
-        : undefined, // No where clause if searchTerm is undefined
+    let empData: any = { rows: [] };
+    const shouldFetchEmployees = !filters?.roleId || filters.roleId.includes('3');
+    
+    if (shouldFetchEmployees) {
+      // Apply same filters to employees where applicable
+      const empUserWhereConditions: any = {};
+      const empRoleDataWhereConditions: any = {};
 
+      // Copy relevant filters for employees
+      if (filters?.accountStatus) {
+        const accountStatuses = filters.accountStatus.split(',').map((status: string) => parseInt(status.trim()));
+        empRoleDataWhereConditions.accountStatus = { [Op.in]: accountStatuses };
+      }
+
+      if (filters?.currentMonth) {
+        const currentDate = new Date();
+        const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+        const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+        empUserWhereConditions.createdAt = {
+          [Op.between]: [startOfMonth, endOfMonth]
+        };
+      }
+
+      if (filters?.lastLogin) {
+        const now = new Date();
+        let startDate: Date;
+        
+        switch (filters.lastLogin) {
+          case 'today':
+            startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            break;
+          case 'week':
+            startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+            break;
+          case 'month':
+            startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+            break;
+          case 'quarter':
+            const quarterStartMonth = Math.floor(now.getMonth() / 3) * 3;
+            startDate = new Date(now.getFullYear(), quarterStartMonth, 1);
+            break;
+          default:
+            startDate = new Date(0);
+        }
+        
+        empUserWhereConditions.lastLogin = {
+          [Op.gte]: startDate
+        };
+      }
+
+      if (filters?.industryId) {
+        const industryIds = filters.industryId.split(',').map((id: string) => parseInt(id.trim()));
+        empRoleDataWhereConditions.industryId = { [Op.in]: industryIds };
+      }
+
+      if (searchTerm) {
+        employeeWhereConditions[Op.or] = [
+          { firstName: { [Op.like]: searchTerm } },
+          { lastName: { [Op.like]: searchTerm } }
+        ];
+      }
+
+      empData = await employee.findAndCountAll({
+        attributes: ["id", "firstName", "lastName", "profile", "createdAt"],
+        where: employeeWhereConditions,
       order: [["createdAt", "DESC"]],
       include: [
         {
           as: "users",
           model: users,
-          attributes: ["id", "roleId", "name"],
+            attributes: ["id", "roleId", "name", "lastLogin", "createdAt"],
+            where: Object.keys(empUserWhereConditions).length > 0 ? empUserWhereConditions : undefined,
           include: [
             {
               as: "roleData",
               model: roleData,
-              attributes: [
-                "id",
-                "firstName",
-                "lastName",
-                "profile",
-                "companyName",
-              ],
+                attributes: ["id", "firstName", "lastName", "profile", "companyName", "accountStatus", "industryId"],
+                where: Object.keys(empRoleDataWhereConditions).length > 0 ? empRoleDataWhereConditions : undefined,
             },
           ],
         },
       ],
     });
-
-    console.log("emp", empData);
+    }
 
     // Combine users and employee data into a unified structure
     const combinedData = [
+      // Individual and Company users (roleId 1, 2)
       ...userData.rows.map((user: any) => ({
         id: user.id,
+        roleId: user.roleId,
+        username: user.name || "",
+        roleData: {
+          profile: user.roleData?.profile || "",
         firstName: user.roleData?.firstName || "",
         lastName: user.roleData?.lastName || "",
-        roleId: user.roleId,
-        name: user.name,
         companyName: user.roleData?.companyName || "",
-        profile: user.roleData?.profile || "",
-        empProfile: "",
+        },
       })),
+      // Employee users (roleId 3)
       ...empData.rows.map((emp: any) => ({
         id: emp.id,
-        firstName: emp.firstName,
-        lastName: emp.lastName,
         roleId: 3,
-        name: emp.users?.name || "",
-        companyName: emp.users?.roleData?.companyName || "",
-        profile: emp.users?.roleData?.profile || "",
-        empProfile: emp.profile || "",
+        username: emp.users?.name || "",
+        profile: emp.profile || "",
+        firstName: emp.firstName || "",
+        lastName: emp.lastName || "",
       })),
     ];
 

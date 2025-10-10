@@ -18,6 +18,7 @@ export interface pushNotificationI {
   sendTo?: JSON | null;
   isSendToAll?: boolean | null;
   image?: string | null;
+  notificationType?: 'auto' | 'admin'; // 'auto' for backend-triggered, 'admin' for admin-created
   createdAt?: Date;
   updatedAt?: Date;
   deletedAt?: Date | null;
@@ -55,6 +56,13 @@ export class pushNotification extends Model<pushNotificationI> {
 
   @Column({ type: DataType.STRING, allowNull: true })
   public image: string;
+
+  @Column({ 
+    type: DataType.ENUM('auto', 'admin'), 
+    allowNull: false, 
+    defaultValue: 'admin' 
+  })
+  public notificationType: 'auto' | 'admin';
 
   @Column(DataType.DATE)
   public createdAt: Date;
