@@ -1,0 +1,1 @@
+DROP DATABASE IF EXISTS bossie_db; CREATE DATABASE bossie_db;

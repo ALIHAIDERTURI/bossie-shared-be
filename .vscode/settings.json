@@ -10,10 +10,11 @@
             "server": "localhost",
             "port": 3306,
             "driver": "MySQL",
-            "name": "bossie",
-            "database": "bossie",
+            "name": "Bossie_Local ",
+            "database": "bossie_db",
             "username": "admin",
-            "askForPassword": true
+            "group": "Bossie",
+            "password": "bossie123"
         }
     ]
 }
