@@ -21,6 +21,7 @@ export interface likeI {
   toRoleId?: number;
   createdAt?: Date;
   updatedAt?: Date;
+  deletedAt?: Date | null;
 }
 
 @Table({

@@ -21,6 +21,7 @@ import {
   updatePasswordSchema,
   userDefaultSchema,
   validateOtpSchema,
+  deleteAccountSchema,
 } from "@src/shared/common/validators/users.validators";
 import { Request, Response } from "express";
 
@@ -622,6 +623,41 @@ export class UserController {
       res.status(403).send({
         statusCode: 403,
         message: error.message,
+      });
+    }
+  };
+
+  public deleteAccount = async (req: Request, res: Response) => {
+    try {
+      const transaction = await sequelize.transaction();
+      try {
+        const { body } = req;
+        
+        let message = "Account deleted successfully. Admin can restore within 90 days.";
+        const data = await deleteAccountSchema.validateAsync(body);
+        
+        await this.__service.deleteAccount(data, transaction);
+        
+        await transaction.commit();
+        
+        res.status(200).json({
+          statusCode: 200,
+          message,
+        });
+      } catch (error: any) {
+        if (transaction) {
+          transaction.rollback();
+        }
+        res.status(403).send({
+          statusCode: 403,
+          message: error.message,
+        });
+      }
+    } catch (error: any) {
+      console.log(error);
+      res.status(403).send({
+        statusCode: 403,
+        message: error?.message,
       });
     }
   };

@@ -96,3 +96,7 @@ userRouter.post("/addVideo", (...args: [Request, Response]) =>
 userRouter.post("/submitAppeal", (...args: [Request, Response]) =>
   userController.submitAppeal(...args)
 );
+
+userRouter.delete("/deleteAccount", (...args: [Request, Response]) =>
+  userController.deleteAccount(...args)
+);

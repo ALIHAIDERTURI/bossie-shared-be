@@ -97,6 +97,11 @@ export const addEmployeeSchema = Joi.object({
   password: Joi.string().required(),
 });
 
+export const deleteAccountSchema = Joi.object({
+  id: Joi.number().integer().required(),
+  roleId: Joi.number().integer().required(),
+});
+
 export const defaultSchema = Joi.object({
   id: Joi.number().integer().required(),
 });

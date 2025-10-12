@@ -13,6 +13,12 @@ import {
   userLog,
   userNotification,
   users,
+  threads,
+  messages,
+  privateThreads,
+  privateMessages,
+  toxicityScores,
+  report
 } from "@src/models";
 import { sendPushNotification } from "@src/utils/pushNotification";
 import { sendEmail } from "@src/utils/sendEmail";
@@ -2628,6 +2634,134 @@ export class UserService {
     return {
       message: "Appeal submitted successfully"
     };
+  };
+
+  /**
+   * User Self-Delete - CASCADE deletes all user data
+   * Admin has 90 days to restore
+   */
+  public deleteAccount = async (
+    data: any,
+    transaction: Transaction
+  ): Promise<any> => {
+    const { id: userId, roleId } = data;
+    const deletedAt = new Date();
+
+    if ([1, 2].includes(roleId)) {
+      // Mark user as self-deleted
+      await users.update(
+        { 
+          deletedAt,
+          deletedBy: null, // Self-delete
+          deletionType: 'self'
+        },
+        { where: { id: userId }, transaction }
+      );
+      
+      // CASCADE: Soft delete all related data
+      await roleData.update({ deletedAt }, { where: { userId }, transaction });
+      await userLog.update({ deletedAt }, { where: { userId }, transaction });
+      await threads.update({ deletedAt }, { where: { ownerId: userId, roleId }, transaction });
+      await messages.update({ deletedAt }, { where: { userId }, transaction });
+      await privateThreads.update({ deletedAt }, { 
+        where: { 
+          [Op.or]: [
+            { ownerUserId: userId },
+            { toUserId: userId }
+          ]
+        }, 
+        transaction 
+      });
+      await privateMessages.update({ deletedAt }, { where: { userId }, transaction });
+      await userNotification.update({ deletedAt }, { where: { userId }, transaction });
+      // Note: like table doesn't support soft delete, so we hard delete instead
+      await like.destroy({ 
+        where: { 
+          [Op.or]: [
+            { userWhoLikeId: userId },
+            { toLikeId: userId }
+          ]
+        }, 
+        transaction 
+      });
+      await toxicityScores.update({ deletedAt }, { where: { userId }, transaction });
+      await report.update({ deletedAt }, { 
+        where: { 
+          [Op.or]: [
+            { userId: userId },
+            { reportedUserId: userId }
+          ]
+        }, 
+        transaction 
+      });
+      
+      // For companies (roleId = 2), also delete all employees
+      if (roleId === 2) {
+        const companyEmployees = await employee.findAll({
+          where: { userId, deletedAt: null },
+          attributes: ['id'],
+          raw: true
+        });
+
+        for (const emp of companyEmployees) {
+          await employee.update({ deletedAt, deletionType: 'self' }, { where: { id: emp.id }, transaction });
+          await userLog.update({ deletedAt }, { where: { employeeId: emp.id }, transaction });
+          await threads.update({ deletedAt }, { where: { ownerEmpId: emp.id, roleId: 3 }, transaction });
+          await messages.update({ deletedAt }, { where: { empId: emp.id }, transaction });
+          await privateMessages.update({ deletedAt }, { where: { empId: emp.id }, transaction });
+          await userNotification.update({ deletedAt }, { where: { employeeId: emp.id }, transaction });
+        }
+      }
+    }
+
+    // Employee self-delete
+    if ([3].includes(roleId)) {
+      await employee.update(
+        { 
+          deletedAt,
+          deletedBy: null,
+          deletionType: 'self'
+        },
+        { where: { id: userId }, transaction }
+      );
+      
+      // CASCADE: Delete all employee data
+      await userLog.update({ deletedAt }, { where: { employeeId: userId }, transaction });
+      await threads.update({ deletedAt }, { where: { ownerEmpId: userId, roleId: 3 }, transaction });
+      await messages.update({ deletedAt }, { where: { empId: userId }, transaction });
+      await privateThreads.update({ deletedAt }, { 
+        where: { 
+          [Op.or]: [
+            { ownerEmpId: userId },
+            { toEmpId: userId }
+          ]
+        }, 
+        transaction 
+      });
+      await privateMessages.update({ deletedAt }, { where: { empId: userId }, transaction });
+      await userNotification.update({ deletedAt }, { where: { employeeId: userId }, transaction });
+      // Note: like table doesn't support soft delete, so we hard delete instead
+      await like.destroy({ 
+        where: { 
+          [Op.or]: [
+            { employeeWhoLikeId: userId },
+            { employeeToLikeId: userId }
+          ]
+        }, 
+        transaction 
+      });
+      await report.update({ deletedAt }, { 
+        where: { 
+          [Op.or]: [
+            { userId: userId, roleId: 3 },
+            { reportedUserId: userId, reportedRoleId: 3 }
+          ]
+        }, 
+        transaction 
+      });
+    }
+
+    return;
   };
 }
 

@@ -7,6 +7,7 @@ import {
   createModeratorsSchema,
   deleteModeratorsSchema,
   delUserSchema,
+  restoreUserSchema,
   emailDefaultSchema,
   getAllUsersSchema,
   getAppInfoSchema,
@@ -588,6 +589,81 @@ export class AdminController {
         const data = await delUserSchema.validateAsync(body);
 
         const response: any = await this.__service.delUser(data, transaction);
+
+        await transaction.commit();
+
+        res.status(200).json({
+          statusCode: 200,
+          message,
+          response,
+        });
+      } catch (error: any) {
+        if (transaction) {
+          transaction.rollback();
+        }
+        res.status(403).send({
+          statusCode: 403,
+          message: error.message,
+        });
+      }
+    } catch (error: any) {
+      console.log(error);
+      res.status(403).send({
+        statusCode: 403,
+        message: error?.message,
+      });
+    }
+  };
+
+  public getDeletedData = async (req: Request, res: Response) => {
+    try {
+      const { query } = req;
+      
+      // Extract query parameters
+      const limit = parseInt(query.limit as string) || 10;
+      const offset = parseInt(query.offset as string) || 0;
+      const filterType = query.filterType as string;
+      const deletionType = query.deletionType as string;
+      const search = query.search as string;
+
+      if (!filterType) {
+        return res.status(400).json({ 
+          statusCode: 400, 
+          message: "filterType is required. Valid types: individuals, companies, employees, forum" 
+        });
+      }
+
+      const data = {
+        limit,
+        offset,
+        filters: {
+          filterType,
+          ...(deletionType && { deletionType }),
+          ...(search && { search })
+        }
+      };
+
+      const response = await this.__service.getDeletedData(data);
+      res.status(200).json({ 
+        statusCode: 200, 
+        message: "Deleted data fetched successfully.", 
+        response 
+      });
+    } catch (error: any) {
+      res.status(403).send({ statusCode: 403, message: error.message });
+    }
+  };
+
+  public restoreUser = async (req: Request, res: Response) => {
+    try {
+      const transaction = await sequelize.transaction();
+      try {
+        const { body } = req;
+
+        let message = "User account has been successfully restored.";
+        const data = await restoreUserSchema.validateAsync(body);
+
+        const response: any = await this.__service.restoreUser(data, transaction);
 
         await transaction.commit();
 

@@ -43,6 +43,8 @@ export interface userI {
   appealMessage?: string;
   hasAppeal?: boolean;
   lastLogin?: Date;
+  deletedBy?: number | null;
+  deletionType?: string | null;
   createdAt?: Date;
   updatedAt?: Date;
   deletedAt?: Date | null;
@@ -189,6 +191,13 @@ export class users extends Model<userI> {
   @ForeignKey((): typeof admin => admin)
   @Column(DataType.INTEGER)
   public rejectedBy: number;
+
+  @ForeignKey((): typeof admin => admin)
+  @Column(DataType.INTEGER)
+  public deletedBy: number;
+
+  @Column(DataType.STRING)
+  public deletionType: string;
 
   // @Column(DataType.INTEGER)
   // public mutedDays: number;

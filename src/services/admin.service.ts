@@ -3383,29 +3383,416 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
   // }
 
 
+  /**
+   * Admin Delete - Only deletes basic profile (keeps forum posts, messages, etc.)
+   * Admin has 90 days to restore
+   */
   public delUser = async (
     data: any,
     transaction: Transaction
   ): Promise<any> => {
-    const { userId, roleId } = data;
+    const { userId, roleId, adminId } = data;
+    const deletedAt = new Date();
 
-    // Soft delete users (roleId 1, 2) by setting deletedAt
+    // Admin delete: ONLY basic profile + roleData (not cascade)
     if ([1, 2].includes(roleId)) {
       await users.update(
-        { deletedAt: new Date() },
+        { 
+          deletedAt,
+          deletedBy: adminId || null,
+          deletionType: 'admin'
+        },
         { where: { id: userId }, transaction }
+      );
+      
+      // Also soft delete roleData (profile details)
+      await roleData.update(
+        { deletedAt },
+        { where: { userId }, transaction }
       );
     }
 
     // Soft delete employees (roleId 3) by setting deletedAt
     if ([3].includes(roleId)) {
       await employee.update(
-        { deletedAt: new Date() },
+        { 
+          deletedAt,
+          deletedBy: adminId || null,
+          deletionType: 'admin'
+        },
         { where: { id: userId }, transaction }
       );
     }
 
     return;
+  };
+
+  /**
+   * Get deleted data (unified method for users, companies, employees, forum)
+   */
+  public getDeletedData = async (data: any): Promise<any> => {
+    const { limit, offset, filters } = data;
+    const { filterType } = filters;
+
+    let whereClause: any = {
+      deletedAt: { [Op.ne]: null }
+    };
+
+    // Filter by deletion type if provided
+    if (filters?.deletionType) {
+      whereClause.deletionType = filters.deletionType;
+    }
+
+    // Search filter
+    let searchClause: any = {};
+    if (filters?.search) {
+      if (filterType === 'forum') {
+        searchClause = {
+          title: { [Op.like]: `%${filters.search}%` }
+        };
+      } else if (filterType === 'employees') {
+        searchClause = {
+          [Op.or]: [
+            { firstName: { [Op.like]: `%${filters.search}%` } },
+            { lastName: { [Op.like]: `%${filters.search}%` } },
+            { email: { [Op.like]: `%${filters.search}%` } }
+          ]
+        };
+      } else {
+        // For individuals and companies (users table)
+        searchClause = {
+          [Op.or]: [
+            { name: { [Op.like]: `%${filters.search}%` } },
+            { email: { [Op.like]: `%${filters.search}%` } }
+          ]
+        };
+      }
+    }
+
+    let res: any;
+    let enhancedRows: any[] = [];
+
+    switch (filterType) {
+      case 'individuals':
+        // Get deleted individuals (roleId = 1)
+        whereClause.roleId = 1;
+        res = await users.findAndCountAll({
+          where: { ...whereClause, ...searchClause },
+          attributes: ["id", "roleId", "name", "email", "deletedAt", "deletedBy", "deletionType"],
+          include: [
+            {
+              model: roleData,
+              attributes: ["profile"],
+              required: false
+            },
+          ],
+          limit,
+          offset: limit * offset,
+          order: [["deletedAt", "DESC"]],
+          paranoid: false,
+          distinct: true,
+        });
+
+        enhancedRows = res.rows.map((user: any) => {
+          const daysRemaining = user.deletedAt 
+            ? Math.max(0, 90 - Math.floor((new Date().getTime() - new Date(user.deletedAt).getTime()) / (1000 * 60 * 60 * 24)))
+            : 0;
+
+          return {
+            id: user.id,
+            roleId: user.roleId,
+            profile: user.roleData?.profile || null,
+            name: user.name || null,
+            email: user.email,
+            deletedAt: user.deletedAt,
+            daysRemaining
+          };
+        });
+        break;
+
+      case 'companies':
+        // Get deleted companies (roleId = 2)
+        whereClause.roleId = 2;
+        res = await users.findAndCountAll({
+          where: { ...whereClause, ...searchClause },
+          attributes: ["id", "roleId", "name", "email", "deletedAt", "deletedBy", "deletionType"],
+          include: [
+            {
+              model: roleData,
+              attributes: ["companyName", "profile"],
+              required: false,
+              where: filters?.search ? {
+                companyName: { [Op.like]: `%${filters.search}%` }
+              } : undefined
+            },
+          ],
+          limit,
+          offset: limit * offset,
+          order: [["deletedAt", "DESC"]],
+          paranoid: false,
+          distinct: true,
+        });
+
+        enhancedRows = res.rows.map((user: any) => {
+          const daysRemaining = user.deletedAt 
+            ? Math.max(0, 90 - Math.floor((new Date().getTime() - new Date(user.deletedAt).getTime()) / (1000 * 60 * 60 * 24)))
+            : 0;
+
+          return {
+            id: user.id,
+            roleId: user.roleId,
+            profile: user.roleData?.profile || null,
+            companyName: user.roleData?.companyName || user.name || null,
+            email: user.email,
+            deletedAt: user.deletedAt,
+            daysRemaining
+          };
+        });
+        break;
+
+      case 'employees':
+        // Get deleted employees
+        res = await employee.findAndCountAll({
+          where: { ...whereClause, ...searchClause },
+          attributes: ["id", "userId", "email", "firstName", "lastName", "profile", "deletedAt", "deletedBy", "deletionType"],
+          limit,
+          offset: limit * offset,
+          order: [["deletedAt", "DESC"]],
+          paranoid: false,
+          distinct: true,
+        });
+
+        enhancedRows = await Promise.all(res.rows.map(async (emp: any) => {
+          const daysRemaining = emp.deletedAt 
+            ? Math.max(0, 90 - Math.floor((new Date().getTime() - new Date(emp.deletedAt).getTime()) / (1000 * 60 * 60 * 24)))
+            : 0;
+
+          // Fetch roleId from the associated user
+          const user = await users.findByPk(emp.userId, { 
+            attributes: ['roleId'],
+            paranoid: false 
+          });
+
+          return {
+            id: emp.id,
+            roleId: user?.roleId || 3,
+            profile: emp.profile || null,
+            firstName: emp.firstName || null,
+            lastName: emp.lastName || null,
+            email: emp.email,
+            deletedAt: emp.deletedAt,
+            daysRemaining
+          };
+        }));
+        break;
+
+      case 'forum':
+        // Get deleted forum content
+        res = await threads.findAndCountAll({
+          where: { ...whereClause, ...searchClause },
+          attributes: ["id", "title", "logo", "deletedAt"],
+          limit,
+          offset: limit * offset,
+          order: [["deletedAt", "DESC"]],
+          paranoid: false,
+          distinct: true,
+        });
+
+        enhancedRows = res.rows.map((thread: any) => {
+          const daysRemaining = thread.deletedAt 
+            ? Math.max(0, 90 - Math.floor((new Date().getTime() - new Date(thread.deletedAt).getTime()) / (1000 * 60 * 60 * 24)))
+            : 0;
+
+          return {
+            id: thread.id,
+            profile: thread.logo || null,
+            title: thread.title || 'Unknown Thread',
+            deletedAt: thread.deletedAt,
+            daysRemaining
+          };
+        });
+        break;
+
+      default:
+        throw new Error(`Invalid filterType: ${filterType}. Valid types are: individuals, companies, employees, forum`);
+    }
+
+    return {
+      totalCount: res.count,
+      rows: enhancedRows,
+    };
+  };
+
+  /**
+   * Restore deleted user/forum thread
+   * - If self-deleted: Restores ALL cascade deleted data
+   * - If admin-deleted: Restores ONLY basic profile
+   */
+  public restoreUser = async (
+    data: any,
+    transaction: Transaction
+  ): Promise<any> => {
+    const { id: userId, roleId, threadId } = data;
+
+    // Handle forum thread restoration
+    if (threadId) {
+      const thread = await threads.findOne({ 
+        where: { id: threadId },
+        paranoid: false
+      });
+
+      if (!thread || !thread.deletedAt) {
+        throw new Error("Thread not found or not deleted");
+      }
+
+      // Restore the thread
+      await threads.update(
+        { deletedAt: null },
+        { where: { id: threadId }, transaction }
+      );
+
+      // Restore all messages in the thread
+      await messages.update(
+        { deletedAt: null },
+        { where: { roomId: threadId }, transaction }
+      );
+
+      return { message: "Forum thread and all related content restored successfully" };
+    }
+
+    // Restore users (individuals or companies)
+    if ([1, 2].includes(roleId)) {
+      const user = await users.findOne({ 
+        where: { id: userId },
+        paranoid: false // Include soft-deleted records
+      });
+
+      if (!user || !user.deletedAt) {
+        throw new Error("User not found or not deleted");
+      }
+
+      const isSelfDelete = user.deletionType === 'self';
+
+      // Restore user
+      await users.update(
+        { 
+          deletedAt: null,
+          deletedBy: null,
+          deletionType: null
+        },
+        { where: { id: userId }, transaction }
+      );
+
+      if (isSelfDelete) {
+        // CASCADE RESTORE: Restore all related data
+        await roleData.update({ deletedAt: null }, { where: { userId }, transaction });
+        await userLog.update({ deletedAt: null }, { where: { userId }, transaction });
+        await threads.update({ deletedAt: null }, { where: { ownerId: userId, roleId }, transaction });
+        await messages.update({ deletedAt: null }, { where: { userId }, transaction });
+        await privateThreads.update({ deletedAt: null }, { 
+          where: { 
+            [Op.or]: [
+              { ownerUserId: userId },
+              { toUserId: userId }
+            ]
+          }, 
+          transaction 
+        });
+        await privateMessages.update({ deletedAt: null }, { where: { userId }, transaction });
+        await userNotification.update({ deletedAt: undefined as any }, { where: { userId }, transaction });
+        // Note: like table doesn't support soft delete, likes were hard deleted and cannot be restored
+        await toxicityScores.update({ deletedAt: null }, { where: { userId }, transaction });
+        await report.update({ deletedAt: null }, { 
+          where: { 
+            [Op.or]: [
+              { userId: userId },
+              { reportedUserId: userId }
+            ]
+          }, 
+          transaction 
+        });
+
+        // For companies, restore employees
+        if (roleId === 2) {
+          const companyEmployees = await employee.findAll({
+            where: { userId },
+            attributes: ['id'],
+            paranoid: false,
+            raw: true
+          });
+
+          for (const emp of companyEmployees) {
+            await employee.update({ deletedAt: null, deletionType: null }, { where: { id: emp.id }, transaction });
+            await userLog.update({ deletedAt: null }, { where: { employeeId: emp.id }, transaction });
+            await threads.update({ deletedAt: null }, { where: { ownerEmpId: emp.id, roleId: 3 }, transaction });
+            await messages.update({ deletedAt: null }, { where: { empId: emp.id }, transaction });
+            await privateMessages.update({ deletedAt: null }, { where: { empId: emp.id }, transaction });
+            await userNotification.update({ deletedAt: undefined as any }, { where: { employeeId: emp.id }, transaction });
+          }
+        }
+      } else {
+        // Admin delete: Only restore basic profile
+        await roleData.update({ deletedAt: null }, { where: { userId }, transaction });
+      }
+
+      return { message: "User restored successfully" };
+    }
+
+    // Restore employees
+    if ([3].includes(roleId)) {
+      const emp = await employee.findOne({ 
+        where: { id: userId },
+        paranoid: false
+      });
+
+      if (!emp || !emp.deletedAt) {
+        throw new Error("Employee not found or not deleted");
+      }
+
+      const isSelfDelete = emp.deletionType === 'self';
+
+      // Restore employee
+      await employee.update(
+        { 
+          deletedAt: null,
+          deletedBy: null,
+          deletionType: null
+        },
+        { where: { id: userId }, transaction }
+      );
+
+      if (isSelfDelete) {
+        // CASCADE RESTORE
+        await userLog.update({ deletedAt: null }, { where: { employeeId: userId }, transaction });
+        await threads.update({ deletedAt: null }, { where: { ownerEmpId: userId, roleId: 3 }, transaction });
+        await messages.update({ deletedAt: null }, { where: { empId: userId }, transaction });
+        await privateThreads.update({ deletedAt: null }, { 
+          where: { 
+            [Op.or]: [
+              { ownerEmpId: userId },
+              { toEmpId: userId }
+            ]
+          }, 
+          transaction 
+        });
+        await privateMessages.update({ deletedAt: null }, { where: { empId: userId }, transaction });
+        await userNotification.update({ deletedAt: undefined as any }, { where: { employeeId: userId }, transaction });
+        // Note: like table doesn't support soft delete, likes were hard deleted and cannot be restored
+        await report.update({ deletedAt: null }, { 
+          where: { 
+            [Op.or]: [
+              { userId: userId, roleId: 3 },
+              { reportedUserId: userId, reportedRoleId: 3 }
+            ]
+          }, 
+          transaction 
+        });
+      }
+
+      return { message: "Employee restored successfully" };
+    }
+
+    return { message: "User restored successfully" };
   };
 
   // public fetchCompaniesData = async (data: any): Promise<any> => {

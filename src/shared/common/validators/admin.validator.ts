@@ -142,6 +142,24 @@ export const delUserSchema = Joi.object({
   roleId: Joi.number().integer().required(),
 });
 
+export const restoreUserSchema = Joi.object({
+  id: Joi.number().integer().optional(),
+  roleId: Joi.number().integer().optional(),
+  threadId: Joi.number().integer().optional()
+}).custom((value, helpers) => {
+  if (value.threadId) {
+    return value;
+  }
+
+  if (value.id && value.roleId) {
+    return value;
+  }
+
+  return helpers.error('custom.restoreValidation');
+}).messages({
+  'custom.restoreValidation': 'Either provide threadId OR provide both id and roleId'
+});
+
 export const getReportedThreadChatByIdSchema = Joi.object({
   threadId: Joi.number().integer().required(),
 });

@@ -46,6 +46,8 @@ export interface employeeI {
   rejectedBy?: number;
   appealMessage?: string;
   hasAppeal?: boolean;
+  deletedBy?: number | null;
+  deletionType?: string | null;
 
 }
 
@@ -200,7 +202,12 @@ export class employee extends Model<employeeI> {
 })
 public roleId: number;
 
+@ForeignKey((): typeof admin => admin)
+@Column(DataType.INTEGER)
+public deletedBy: number;
 
+@Column(DataType.STRING)
+public deletionType: string;
 
 }
 

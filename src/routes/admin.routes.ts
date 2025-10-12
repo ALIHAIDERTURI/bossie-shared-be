@@ -69,6 +69,14 @@ adminRouter.delete("/delUser", (...args: [Request, Response]) =>
   adminControler.delUser(...args)
 );
 
+adminRouter.get("/getDeletedData", (...args: [Request, Response]) =>
+  adminControler.getDeletedData(...args)
+);
+
+adminRouter.post("/restoreUser", (...args: [Request, Response]) =>
+  adminControler.restoreUser(...args)
+);
+
 adminRouter.get("/getUserLogInfo", (...args: [Request, Response]) =>
   adminControler.getUserLogInfo(...args)
 );
