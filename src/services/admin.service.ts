@@ -3445,10 +3445,15 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
 
     // Search filter
     let searchClause: any = {};
+    let includeSearchClause: any = {};
+    
     if (filters?.search) {
       if (filterType === 'forum') {
         searchClause = {
-          title: { [Op.like]: `%${filters.search}%` }
+          [Op.or]: [
+            { title: { [Op.like]: `%${filters.search}%` } },
+            { description: { [Op.like]: `%${filters.search}%` } }
+          ]
         };
       } else if (filterType === 'employees') {
         searchClause = {
@@ -3458,13 +3463,22 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
             { email: { [Op.like]: `%${filters.search}%` } }
           ]
         };
-      } else {
-        // For individuals and companies (users table)
+      } else if (filterType === 'individuals') {
         searchClause = {
+          email: { [Op.like]: `%${filters.search}%` }
+        };
+        includeSearchClause = {
           [Op.or]: [
-            { name: { [Op.like]: `%${filters.search}%` } },
-            { email: { [Op.like]: `%${filters.search}%` } }
+            { firstName: { [Op.like]: `%${filters.search}%` } },
+            { lastName: { [Op.like]: `%${filters.search}%` } }
           ]
+        };
+      } else if (filterType === 'companies') {
+        searchClause = {
+          email: { [Op.like]: `%${filters.search}%` }
+        };
+        includeSearchClause = {
+          companyName: { [Op.like]: `%${filters.search}%` }
         };
       }
     }
@@ -3476,14 +3490,31 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
       case 'individuals':
         // Get deleted individuals (roleId = 1)
         whereClause.roleId = 1;
+        
+        // If there's a search term, we need to use Op.or to search in both users table and roleData
+        let individualsWhereClause = { ...whereClause };
+        let individualsIncludeWhere = undefined;
+        
+        if (filters.search) {
+          individualsWhereClause[Op.or] = [
+            { email: { [Op.like]: `%${filters.search}%` } },
+            { '$roleData.firstName$': { [Op.like]: `%${filters.search}%` } },
+            { '$roleData.lastName$': { [Op.like]: `%${filters.search}%` } }
+          ];
+          individualsIncludeWhere = {};
+        } else {
+          individualsWhereClause = { ...whereClause };
+        }
+        
         res = await users.findAndCountAll({
-          where: { ...whereClause, ...searchClause },
-          attributes: ["id", "roleId", "name", "email", "deletedAt", "deletedBy", "deletionType"],
+          where: individualsWhereClause,
+          attributes: ["id", "roleId", "email", "deletedAt", "deletedBy", "deletionType"],
           include: [
             {
               model: roleData,
-              attributes: ["profile"],
-              required: false
+              attributes: ["profile", "firstName", "lastName", "companyName"],
+              required: false,
+              where: individualsIncludeWhere
             },
           ],
           limit,
@@ -3501,11 +3532,14 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
           return {
             id: user.id,
             roleId: user.roleId,
-            profile: user.roleData?.profile || null,
-            name: user.name || null,
             email: user.email,
             deletedAt: user.deletedAt,
-            daysRemaining
+            daysRemaining,
+            roleData: user.roleData ? {
+              profile: user.roleData.profile || null,
+              firstName: user.roleData.firstName || null,
+              lastName: user.roleData.lastName || null
+            } : null
           };
         });
         break;
@@ -3513,17 +3547,30 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
       case 'companies':
         // Get deleted companies (roleId = 2)
         whereClause.roleId = 2;
+        
+        // If there's a search term, we need to use Op.or to search in both users table and roleData
+        let companiesWhereClause = { ...whereClause };
+        let companiesIncludeWhere = undefined;
+        
+        if (filters.search) {
+          companiesWhereClause[Op.or] = [
+            { email: { [Op.like]: `%${filters.search}%` } },
+            { '$roleData.companyName$': { [Op.like]: `%${filters.search}%` } }
+          ];
+          companiesIncludeWhere = {};
+        } else {
+          companiesWhereClause = { ...whereClause };
+        }
+        
         res = await users.findAndCountAll({
-          where: { ...whereClause, ...searchClause },
-          attributes: ["id", "roleId", "name", "email", "deletedAt", "deletedBy", "deletionType"],
+          where: companiesWhereClause,
+          attributes: ["id", "roleId", "email", "deletedAt", "deletedBy", "deletionType"],
           include: [
             {
               model: roleData,
-              attributes: ["companyName", "profile"],
+              attributes: ["profile", "firstName", "lastName", "companyName"],
               required: false,
-              where: filters?.search ? {
-                companyName: { [Op.like]: `%${filters.search}%` }
-              } : undefined
+              where: companiesIncludeWhere
             },
           ],
           limit,
@@ -3541,11 +3588,13 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
           return {
             id: user.id,
             roleId: user.roleId,
-            profile: user.roleData?.profile || null,
-            companyName: user.roleData?.companyName || user.name || null,
             email: user.email,
             deletedAt: user.deletedAt,
-            daysRemaining
+            daysRemaining,
+            roleData: user.roleData ? {
+              profile: user.roleData.profile || null,
+              companyName: user.roleData.companyName || null
+            } : null
           };
         });
         break;
@@ -3554,7 +3603,7 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
         // Get deleted employees
         res = await employee.findAndCountAll({
           where: { ...whereClause, ...searchClause },
-          attributes: ["id", "userId", "email", "firstName", "lastName", "profile", "deletedAt", "deletedBy", "deletionType"],
+          attributes: ["id", "userId", "email", "firstName", "lastName", "profile", "username", "deletedAt", "deletedBy", "deletionType"],
           limit,
           offset: limit * offset,
           order: [["deletedAt", "DESC"]],
@@ -3590,7 +3639,7 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
         // Get deleted forum content
         res = await threads.findAndCountAll({
           where: { ...whereClause, ...searchClause },
-          attributes: ["id", "title", "logo", "deletedAt"],
+          attributes: ["id", "title", "logo", "description", "deletedAt"],
           limit,
           offset: limit * offset,
           order: [["deletedAt", "DESC"]],
@@ -3605,7 +3654,7 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
 
           return {
             id: thread.id,
-            profile: thread.logo || null,
+            logo: thread.logo || null,
             title: thread.title || 'Unknown Thread',
             deletedAt: thread.deletedAt,
             daysRemaining
@@ -6395,7 +6444,12 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
             hasAppeal: user.hasAppeal,
             appealMessage: user.appealMessage,
             createdAt: user.createdAt,
-            roleData: user.roleData || null,
+            roleData: user.roleData ? {
+              profile: user.roleData.profile || null,
+              firstName: user.roleData.firstName || null,
+              lastName: user.roleData.lastName || null,
+              companyName: user.roleData.companyName || null
+            } : null,
           };
         })
       );

@@ -545,6 +545,11 @@ export class UserService {
       throw new Error("Gebruiker bestaat niet.");
     }
 
+    // Check if employee is deleted
+    if (employeeData.deletedAt) {
+      throw new Error("Uw account is verwijderd. Neem contact op met de beheerder.");
+    }
+
     const checkPassword = bcrypt.compareSync(password, employeeData.password);
     if (!checkPassword) {
       throw new Error("Er is iets misgegaan. Controleer uw e-mailadres en wachtwoord.");
@@ -630,6 +635,11 @@ export class UserService {
   }
 
   // Normal user flow
+  // Check if user is deleted
+  if (userData.deletedAt) {
+    throw new Error("Uw account is verwijderd. Neem contact op met de beheerder.");
+  }
+
   const checkPassword = bcrypt.compareSync(password, userData.password);
   if (!checkPassword) {
     throw new Error("Er is iets misgegaan. Controleer uw e-mailadres en wachtwoord.");
