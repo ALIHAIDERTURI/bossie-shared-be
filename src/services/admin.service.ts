@@ -3508,7 +3508,7 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
         
         res = await users.findAndCountAll({
           where: individualsWhereClause,
-          attributes: ["id", "roleId", "email", "deletedAt", "deletedBy", "deletionType"],
+          attributes: ["id", "roleId", "name", "email", "deletedAt", "deletedBy", "deletionType"],
           include: [
             {
               model: roleData,
@@ -3532,6 +3532,7 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
           return {
             id: user.id,
             roleId: user.roleId,
+            username: user.name || null,
             email: user.email,
             deletedAt: user.deletedAt,
             daysRemaining,
@@ -3564,7 +3565,7 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
         
         res = await users.findAndCountAll({
           where: companiesWhereClause,
-          attributes: ["id", "roleId", "email", "deletedAt", "deletedBy", "deletionType"],
+          attributes: ["id", "roleId", "name", "email", "deletedAt", "deletedBy", "deletionType"],
           include: [
             {
               model: roleData,
@@ -3588,6 +3589,7 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
           return {
             id: user.id,
             roleId: user.roleId,
+            username: user.name || null,
             email: user.email,
             deletedAt: user.deletedAt,
             daysRemaining,
@@ -3603,7 +3605,7 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
         // Get deleted employees
         res = await employee.findAndCountAll({
           where: { ...whereClause, ...searchClause },
-          attributes: ["id", "userId", "email", "firstName", "lastName", "profile", "username", "deletedAt", "deletedBy", "deletionType"],
+          attributes: ["id", "userId", "email", "firstName", "lastName", "profile", "deletedAt", "deletedBy", "deletionType"],
           limit,
           offset: limit * offset,
           order: [["deletedAt", "DESC"]],
