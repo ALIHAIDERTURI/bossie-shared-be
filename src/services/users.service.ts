@@ -2110,6 +2110,7 @@ export class UserService {
       isApproved: employeeData.isApproved,
       status: employeeData.profileStatus,
       firstTimeLogin: employeeData.firstTimeLogin,
+      deletedAt: employeeData.deletedAt,
       roleId: 3,
       roleData: {
         accountStatus: employeeData.accountStatus,
@@ -2184,6 +2185,7 @@ export class UserService {
     rejectionReason: userData?.rejectionReason,
     roleData: userData?.roleData,
     employeeCount,
+    deletedAt: userData?.deletedAt,
   };
 };
 
