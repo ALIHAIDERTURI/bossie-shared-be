@@ -2189,6 +2189,9 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
         "emailVerified",
         "appealMessage",
         "lastLogin",
+        "toxicityPercentage",
+        "toxicityReasoning",
+        "toxicityUpdatedAt",
         "createdAt",
         "updatedAt"
       ],
@@ -2386,6 +2389,9 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
       "rejectionReason",
       "emailVerified",
       "appealMessage",
+      "toxicityPercentage",
+      "toxicityReasoning",
+      "toxicityUpdatedAt",
       "createdAt",
       "updatedAt",
       "lastLogin"   // 👈 Added here
@@ -4377,6 +4383,9 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
     "rejectionReason",
     "appealMessage",
     "hasAppeal",
+    "toxicityPercentage",
+    "toxicityReasoning",
+    "toxicityUpdatedAt",
     "createdAt",
     "updatedAt",
     "suspendedOn",
@@ -4676,7 +4685,7 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
         where: name
           ? { title: { [Op.like]: `%${name}%` } }
           : {},
-        attributes: ["id", "title"],
+        attributes: ["id", "title", "aiSummary", "aiSummaryUpdatedAt"],
         include: [
           {
             as: "users",
@@ -6905,7 +6914,7 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
       response.rows.map(async (reportItem: any) => {
           const reportedUser = await users.findOne({
           where: { id: reportItem.reportedUserId, deletedAt: null, roleId: 1 },
-            attributes: ["id", "name", "roleId"],
+            attributes: ["id", "name", "roleId", "toxicityPercentage", "toxicityReasoning", "toxicityUpdatedAt"],
             include: [
               {
                 model: roleData,
@@ -6925,7 +6934,10 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
                 ? `${userRoleData.firstName} ${userRoleData.lastName}`
                 : reportedUser.name,
               profile: userRoleData?.profile,
-              roleId: reportedUser.roleId
+              roleId: reportedUser.roleId,
+              toxicityPercentage: reportedUser.toxicityPercentage,
+              toxicityReasoning: reportedUser.toxicityReasoning,
+              toxicityUpdatedAt: reportedUser.toxicityUpdatedAt
             };
         }
 
@@ -6933,6 +6945,9 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
           id: reportItem.id,
           name: reportedUserInfo?.name || 'Unknown User',
           profile: reportedUserInfo?.profile || null,
+          toxicityPercentage: reportedUserInfo?.toxicityPercentage || null,
+          toxicityReasoning: reportedUserInfo?.toxicityReasoning || null,
+          toxicityUpdatedAt: reportedUserInfo?.toxicityUpdatedAt || null,
           createdAt: reportItem.createdAt
         };
       })
@@ -7023,7 +7038,7 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
       response.rows.map(async (reportItem: any) => {
         const reportedEmployee = await employee.findOne({
           where: { id: reportItem.reportedUserId, deletedAt: null },
-          attributes: ["id", "firstName", "lastName", "profile", "email"],
+          attributes: ["id", "firstName", "lastName", "profile", "email", "toxicityPercentage", "toxicityReasoning", "toxicityUpdatedAt"],
           include: [
             {
               model: users,
@@ -7054,7 +7069,10 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
             profile: reportedEmployee.profile,
             email: reportedEmployee.email,
             companyName: roleData?.companyName || 'Unknown Company',
-            roleId: 3
+            roleId: 3,
+            toxicityPercentage: reportedEmployee.toxicityPercentage,
+            toxicityReasoning: reportedEmployee.toxicityReasoning,
+            toxicityUpdatedAt: reportedEmployee.toxicityUpdatedAt
           };
         }
 
@@ -7064,6 +7082,9 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
           profile: reportedEmployeeInfo?.profile || null,
           email: reportedEmployeeInfo?.email || null,
           companyName: reportedEmployeeInfo?.companyName || 'Unknown Company',
+          toxicityPercentage: reportedEmployeeInfo?.toxicityPercentage || null,
+          toxicityReasoning: reportedEmployeeInfo?.toxicityReasoning || null,
+          toxicityUpdatedAt: reportedEmployeeInfo?.toxicityUpdatedAt || null,
           createdAt: reportItem.createdAt
         };
       })
@@ -7876,6 +7897,99 @@ public getProfileUpdateRequests = async (data: any): Promise<any> => {
       };
     } catch (error: any) {
       throw new Error(`Failed to calculate toxicity score: ${error.message}`);
+    }
+  };
+
+  public generateThreadSummary = async (data: any): Promise<any> => {
+    const { threadId, isPrivate = false } = data;
+
+    try {
+      const summary = await this.toxicityService.generateThreadSummary(threadId, isPrivate);
+      
+      // Update the thread with the summary
+      if (isPrivate) {
+        await privateThreads.update(
+          { 
+            aiSummary: summary,
+            aiSummaryUpdatedAt: new Date()
+          },
+          { where: { id: threadId } }
+        );
+      } else {
+        await threads.update(
+          { 
+            aiSummary: summary,
+            aiSummaryUpdatedAt: new Date()
+          },
+          { where: { id: threadId } }
+        );
+      }
+
+      return {
+        success: true,
+        data: {
+          threadId,
+          isPrivate,
+          summary,
+          updatedAt: new Date()
+        }
+      };
+    } catch (error: any) {
+      throw new Error(`Failed to generate thread summary: ${error.message}`);
+    }
+  };
+
+  public updateUserToxicityPercentage = async (data: any): Promise<any> => {
+    const { userId, roleId, toxicityPercentage, reasoning } = data;
+    console.log("AdminService - updateUserToxicityPercentage - Input data:", data);
+
+    try {
+      const result = await this.toxicityService.updateUserToxicityData(
+        userId,
+        roleId,
+        toxicityPercentage,
+        reasoning || null
+      );
+      console.log("AdminService - updateUserToxicityPercentage - ToxicityService result:", result);
+
+      return {
+        success: true,
+        data: result
+      };
+    } catch (error: any) {
+      console.error("AdminService - updateUserToxicityPercentage - Error:", error);
+      throw new Error(`Failed to update user toxicity percentage: ${error.message}`);
+    }
+  };
+
+  public calculateUserToxicityWithReasoning = async (data: any): Promise<any> => {
+    const { userId, roleId } = data;
+
+    try {
+      const analysis = await this.toxicityService.calculateUserToxicityScore(userId, roleId);
+      
+      // Update the user with the new toxicity data
+      await this.toxicityService.updateUserToxicityData(
+        userId,
+        roleId,
+        analysis.toxicityScore,
+        analysis.analysis
+      );
+
+      return {
+        success: true,
+        data: {
+          userId,
+          roleId,
+          toxicityPercentage: analysis.toxicityScore,
+          reasoning: analysis.analysis,
+          summary: analysis.summary,
+          conversationCount: analysis.conversationCount,
+          analyzedAt: analysis.analyzedAt
+        }
+      };
+    } catch (error: any) {
+      throw new Error(`Failed to calculate user toxicity with reasoning: ${error.message}`);
     }
   };
 

@@ -45,6 +45,9 @@ export interface userI {
   lastLogin?: Date;
   deletedBy?: number | null;
   deletionType?: string | null;
+  toxicityPercentage?: number | null;
+  toxicityReasoning?: string | null;
+  toxicityUpdatedAt?: Date | null;
   createdAt?: Date;
   updatedAt?: Date;
   deletedAt?: Date | null;
@@ -198,6 +201,15 @@ export class users extends Model<userI> {
 
   @Column(DataType.STRING)
   public deletionType: string;
+
+  @Column(DataType.INTEGER)
+  public toxicityPercentage: number | null;
+
+  @Column(DataType.TEXT('long'))
+  public toxicityReasoning: string | null;
+
+  @Column(DataType.DATE)
+  public toxicityUpdatedAt: Date | null;
 
   // @Column(DataType.INTEGER)
   // public mutedDays: number;

@@ -238,6 +238,21 @@ export const calculateToxicityScoreSchema = Joi.object({
   roleId: Joi.number().integer().valid(1, 2, 3).required()
 });
 
+export const generateThreadSummarySchema = Joi.object({
+  threadId: Joi.number().integer().required(),
+  isPrivate: Joi.boolean().default(false)
+});
+
+export const updateUserToxicityPercentageSchema = Joi.object({
+  toxicityPercentage: Joi.number().integer().min(0).max(100).required(),
+  reasoning: Joi.string().optional()
+});
+
+export const calculateUserToxicityWithReasoningSchema = Joi.object({
+  userId: Joi.number().integer().required(),
+  roleId: Joi.number().integer().valid(1, 2, 3).required()
+});
+
 export const getAllCompanyInfoSchema = Joi.object({
   limit: Joi.number().integer().required(),
   offset: Joi.number().integer().required(),

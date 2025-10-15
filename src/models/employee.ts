@@ -48,6 +48,9 @@ export interface employeeI {
   hasAppeal?: boolean;
   deletedBy?: number | null;
   deletionType?: string | null;
+  toxicityPercentage?: number | null;
+  toxicityReasoning?: string | null;
+  toxicityUpdatedAt?: Date | null;
 
 }
 
@@ -208,6 +211,15 @@ public deletedBy: number;
 
 @Column(DataType.STRING)
 public deletionType: string;
+
+@Column(DataType.INTEGER)
+public toxicityPercentage: number | null;
+
+@Column(DataType.TEXT('long'))
+public toxicityReasoning: string | null;
+
+@Column(DataType.DATE)
+public toxicityUpdatedAt: Date | null;
 
 }
 

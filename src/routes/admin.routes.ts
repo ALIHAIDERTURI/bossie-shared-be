@@ -229,6 +229,18 @@ adminRouter.post("/calculateToxicityScore", (...args: [Request, Response]) =>
   adminControler.calculateUserToxicityScore(...args)
 );
 
+adminRouter.post("/generateThreadSummary", (...args: [Request, Response]) =>
+  adminControler.generateThreadSummary(...args)
+);
+
+adminRouter.patch("/updateUserToxicityPercentage/:userId/:roleId", (...args: [Request, Response]) =>
+  adminControler.updateUserToxicityPercentage(...args)
+);
+
+adminRouter.post("/calculateUserToxicityWithReasoning", (...args: [Request, Response]) =>
+  adminControler.calculateUserToxicityWithReasoning(...args)
+);
+
 // adminRouter.get("/getModeratorLogs/:moderatorId", (...args: [Request, Response]) =>
 //   adminControler.getModeratorLogs(...args)
 // );

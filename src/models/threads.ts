@@ -33,6 +33,8 @@ export interface threadsI {
   updatedAt?: Date;
   deletedAt?: Date | null;
   hidden?: boolean | null;
+  aiSummary?: string | null;
+  aiSummaryUpdatedAt?: Date | null;
 }
 
 @Table({
@@ -127,6 +129,12 @@ export class threads extends Model<threadsI> {
     defaultValue: 1,
   })
   public typeId: number;
+
+  @Column(DataType.TEXT('long'))
+  public aiSummary: string | null;
+
+  @Column(DataType.DATE)
+  public aiSummaryUpdatedAt: Date | null;
 
   @Column({
     type: DataType.VIRTUAL,

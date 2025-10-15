@@ -31,7 +31,7 @@ export class ToxicityService {
                     {
                         model: privateThreads,
                         as: "privateThreads",
-                        attributes: ["id", "userId", "employeeId"],
+                        attributes: ["id", "ownerUserId", "ownerEmpId"],
                         include: [
                             {
                                 model: users,
@@ -183,8 +183,11 @@ Respond in JSON format:
 
     public calculateUserToxicityScore = async (userId: number, roleId: number): Promise<any> => {
         try {
+            console.log("ToxicityService - calculateUserToxicityScore - Starting analysis for userId:", userId, "roleId:", roleId);
+            
             const recentAnalysis = await this.getRecentToxicityScore(userId, 24);
             if (recentAnalysis) {
+                console.log("ToxicityService - Found recent analysis, returning cached result");
                 return {
                     userId,
                     roleId,
@@ -197,13 +200,32 @@ Respond in JSON format:
                 };
             }
 
+            console.log("ToxicityService - No recent analysis found, fetching conversations...");
             const conversations = await this.getUserConversations(userId, roleId);
+            console.log("ToxicityService - Found conversations:", conversations.length);
+
+            if (conversations.length === 0) {
+                console.log("ToxicityService - No conversations found, returning default analysis");
+                return {
+                    userId,
+                    roleId,
+                    toxicityScore: 0,
+                    summary: "No conversation history found",
+                    analysis: "User has no recent conversation history to analyze",
+                    conversationCount: 0,
+                    analyzedAt: new Date(),
+                    cached: false
+                };
+            }
 
             if (!this.openai) {
+                console.error("ToxicityService - OpenAI API key not configured");
                 throw new Error("OpenAI API key not configured. Cannot perform toxicity analysis.");
             }
 
+            console.log("ToxicityService - Starting AI analysis...");
             const analysis = await this.analyzeToxicity(conversations);
+            console.log("ToxicityService - AI analysis completed:", analysis);
 
             const storedAnalysis = await toxicityScores.create({
                 userId,
@@ -214,6 +236,7 @@ Respond in JSON format:
                 conversationCount: conversations.length,
                 analyzedAt: new Date()
             });
+            console.log("ToxicityService - Analysis stored in database");
 
             return {
                 userId,
@@ -225,9 +248,9 @@ Respond in JSON format:
                 analyzedAt: storedAnalysis.analyzedAt,
                 cached: false
             };
-        } catch (error) {
-            console.error("Error calculating toxicity score:", error);
-            throw new Error("Failed to calculate toxicity score");
+        } catch (error: any) {
+            console.error("ToxicityService - Error calculating toxicity score:", error);
+            throw new Error(`Failed to calculate toxicity score: ${error.message}`);
         }
     };
 
@@ -292,6 +315,217 @@ Respond in JSON format:
         } catch (error) {
             console.error("Error fetching toxicity score history:", error);
             return [];
+        }
+    };
+
+    public generateThreadSummary = async (threadId: number, isPrivate: boolean = false): Promise<string> => {
+        try {
+            if (!this.openai) {
+                throw new Error("OpenAI API key not configured. Cannot generate thread summary.");
+            }
+
+            let conversationMessages: any[] = [];
+            
+            if (isPrivate) {
+                // Get all messages from private thread
+                const privateMessagesData = await privateMessages.findAll({
+                    where: { roomId: threadId },
+                    include: [
+                        {
+                            model: users,
+                            as: "users",
+                            attributes: ["id", "name", "roleId"],
+                            include: [
+                                {
+                                    model: roleData,
+                                    as: "roleData",
+                                    attributes: ["firstName", "lastName", "companyName"]
+                                }
+                            ]
+                        },
+                        {
+                            model: employee,
+                            as: "employee",
+                            attributes: ["id", "firstName", "lastName"]
+                        }
+                    ],
+                    order: [["createdAt", "ASC"]]
+                });
+
+                conversationMessages = privateMessagesData.map((msg: any) => {
+                    let senderName = "Unknown";
+                    if (msg.users) {
+                        if (msg.users.roleId === 2) {
+                            senderName = msg.users.roleData?.companyName || msg.users.name;
+                        } else {
+                            senderName = `${msg.users.roleData?.firstName || ""} ${msg.users.roleData?.lastName || ""}`.trim() || msg.users.name;
+                        }
+                    } else if (msg.employee) {
+                        senderName = `${msg.employee.firstName} ${msg.employee.lastName}`;
+                    }
+                    
+                    return `[${msg.createdAt.toISOString()}] ${senderName}: ${msg.message}`;
+                });
+            } else {
+                // Get all messages from public thread
+                const publicMessagesData = await messages.findAll({
+                    where: { roomId: threadId },
+                    include: [
+                        {
+                            model: users,
+                            as: "users",
+                            attributes: ["id", "name", "roleId"],
+                            include: [
+                                {
+                                    model: roleData,
+                                    as: "roleData",
+                                    attributes: ["firstName", "lastName", "companyName"]
+                                }
+                            ]
+                        },
+                        {
+                            model: employee,
+                            as: "employee",
+                            attributes: ["id", "firstName", "lastName"]
+                        }
+                    ],
+                    order: [["createdAt", "ASC"]]
+                });
+
+                conversationMessages = publicMessagesData.map((msg: any) => {
+                    let senderName = "Unknown";
+                    if (msg.users) {
+                        if (msg.users.roleId === 2) {
+                            senderName = msg.users.roleData?.companyName || msg.users.name;
+                        } else {
+                            senderName = `${msg.users.roleData?.firstName || ""} ${msg.users.roleData?.lastName || ""}`.trim() || msg.users.name;
+                        }
+                    } else if (msg.employee) {
+                        senderName = `${msg.employee.firstName} ${msg.employee.lastName}`;
+                    }
+                    
+                    return `[${msg.createdAt.toISOString()}] ${senderName}: ${msg.message}`;
+                });
+            }
+
+            if (conversationMessages.length === 0) {
+                return "No messages found in this thread.";
+            }
+
+            const conversationText = conversationMessages.join('\n');
+
+            const prompt = `
+Analyze the following ${isPrivate ? 'private' : 'public'} conversation thread and provide a comprehensive summary.
+
+Conversation:
+${conversationText}
+
+Please provide a detailed summary that includes:
+1. Main topics discussed
+2. Key decisions or outcomes
+3. Important information shared
+4. Any concerning behavior or content (if applicable)
+5. Overall tone and nature of the conversation
+
+Keep the summary concise but comprehensive, focusing on the most important aspects of the conversation.
+`;
+
+            const completion = await this.openai.chat.completions.create({
+                model: "gpt-4",
+                messages: [
+                    {
+                        role: "system",
+                        content: "You are an expert content analyst specializing in summarizing conversations for moderation and review purposes. Provide clear, objective, and comprehensive summaries."
+                    },
+                    {
+                        role: "user",
+                        content: prompt
+                    }
+                ],
+                temperature: 0.3,
+                max_tokens: 1000
+            });
+
+            const response = completion.choices[0]?.message?.content;
+            
+            if (!response) {
+                throw new Error("No response from OpenAI");
+            }
+
+            return response;
+
+        } catch (error) {
+            console.error("Error generating thread summary:", error);
+            throw new Error("Failed to generate thread summary");
+        }
+    };
+
+    public updateUserToxicityData = async (userId: number, roleId: number, toxicityPercentage: number, reasoning: string): Promise<any> => {
+        try {
+            console.log("ToxicityService - updateUserToxicityData - Input:", { userId, roleId, toxicityPercentage, reasoning });
+            
+            // First, check if the user/employee exists
+            let userExists = false;
+            if (roleId === 3) {
+                const existingEmployee = await employee.findOne({
+                    where: { id: userId, deletedAt: null },
+                    attributes: ['id']
+                });
+                userExists = !!existingEmployee;
+                console.log("ToxicityService - Employee exists:", userExists);
+            } else {
+                const existingUser = await users.findOne({
+                    where: { id: userId, deletedAt: null },
+                    attributes: ['id']
+                });
+                userExists = !!existingUser;
+                console.log("ToxicityService - User exists:", userExists);
+            }
+
+            if (!userExists) {
+                throw new Error(`User not found`);
+            }
+            
+            const updateData = {
+                toxicityPercentage,
+                toxicityReasoning: reasoning,
+                toxicityUpdatedAt: new Date()
+            };
+            console.log("ToxicityService - updateUserToxicityData - Update data:", updateData);
+
+            let updateResult;
+            if (roleId === 3) {
+                // Update employee
+                console.log("ToxicityService - Updating employee with ID:", userId);
+                updateResult = await employee.update(updateData, { where: { id: userId } });
+            } else {
+                // Update user (roleId 1 or 2)
+                console.log("ToxicityService - Updating user with ID:", userId);
+                updateResult = await users.update(updateData, { where: { id: userId } });
+            }
+            
+            console.log("ToxicityService - updateUserToxicityData - Update result:", updateResult);
+            
+            // Check if any rows were actually updated
+            const rowsAffected = updateResult[0]; // Sequelize update returns [affectedCount, affectedRows]
+            if (rowsAffected === 0) {
+                throw new Error(`Update failed`);
+            }
+
+            console.log("ToxicityService - updateUserToxicityData - Update completed successfully, rows affected:", rowsAffected);
+
+            return {
+                success: true,
+                userId,
+                roleId,
+                toxicityPercentage,
+                reasoning,
+                updatedAt: updateData.toxicityUpdatedAt,
+                rowsAffected
+            };
+        } catch (error: any) {
+            console.error("ToxicityService - Error updating user toxicity data:", error);
+            throw new Error(error.message);
         }
     };
 }

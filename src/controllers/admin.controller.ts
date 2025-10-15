@@ -19,6 +19,9 @@ import {
   limitDefaultSchema,
   markReportAsResolvedSchema,
   calculateToxicityScoreSchema,
+  generateThreadSummarySchema,
+  updateUserToxicityPercentageSchema,
+  calculateUserToxicityWithReasoningSchema,
   saveAppInfoSchema,
   solvePrivateReportSchema,
   suspendUserSchema,
@@ -1478,6 +1481,80 @@ export class AdminController {
       const { body } = req;
       const data = await calculateToxicityScoreSchema.validateAsync(body);
       const response: any = await this.__service.calculateUserToxicityScore(data);
+
+      res.status(200).json({
+        statusCode: 200,
+        message,
+        response,
+      });
+    } catch (error: any) {
+      res.status(403).send({
+        statusCode: 403,
+        message: error.message,
+      });
+    }
+  };
+
+  public generateThreadSummary = async (req: Request, res: Response) => {
+    try {
+      let message = "Thread summary generated successfully.";
+      const { body } = req;
+      const data = await generateThreadSummarySchema.validateAsync(body);
+      const response: any = await this.__service.generateThreadSummary(data);
+
+      res.status(200).json({
+        statusCode: 200,
+        message,
+        response,
+      });
+    } catch (error: any) {
+      res.status(403).send({
+        statusCode: 403,
+        message: error.message,
+      });
+    }
+  };
+
+  public updateUserToxicityPercentage = async (req: Request, res: Response) => {
+    try {
+      console.log("UpdateUserToxicityPercentage - Request body:", req.body);
+      console.log("UpdateUserToxicityPercentage - Request params:", req.params);
+      let message = "User toxicity percentage updated successfully.";
+      
+      const { body, params } = req;
+      const { userId, roleId } = params;
+      const validatedBody = await updateUserToxicityPercentageSchema.validateAsync(body);
+      
+      const data = {
+        userId: parseInt(userId),
+        roleId: parseInt(roleId),
+        ...validatedBody
+      };
+      console.log("UpdateUserToxicityPercentage - Final data:", data);
+      
+      const response: any = await this.__service.updateUserToxicityPercentage(data);
+      console.log("UpdateUserToxicityPercentage - Service response:", response);
+
+      res.status(200).json({
+        statusCode: 200,
+        message,
+        response,
+      });
+    } catch (error: any) {
+      console.error("UpdateUserToxicityPercentage - Error:", error);
+      res.status(403).send({
+        statusCode: 403,
+        message: error.message,
+      });
+    }
+  };
+
+  public calculateUserToxicityWithReasoning = async (req: Request, res: Response) => {
+    try {
+      let message = "User toxicity score and reasoning calculated successfully.";
+      const { body } = req;
+      const data = await calculateUserToxicityWithReasoningSchema.validateAsync(body);
+      const response: any = await this.__service.calculateUserToxicityWithReasoning(data);
 
       res.status(200).json({
         statusCode: 200,

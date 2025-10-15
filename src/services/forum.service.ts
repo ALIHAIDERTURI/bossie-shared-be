@@ -18,10 +18,17 @@ import {
 import { globalIo } from "..";
 import { Op, Sequelize, Transaction } from "sequelize";
 import { sequelize } from "@src/config/database";
+import { ToxicityService } from "./toxicity.service";
 
 const io = require("socket.io");
 
 export class ForumService {
+  private toxicityService: ToxicityService;
+
+  constructor() {
+    this.toxicityService = new ToxicityService();
+  }
+
   public createCategory = async (data: any): Promise<any> => {
     const { name } = data;
 
@@ -932,6 +939,56 @@ export class ForumService {
     };
 
     await userNotification.create({ ...notificationData }, { transaction });
+
+    // Trigger automatic AI analysis based on report type
+    try {
+      if (statusId === 1 && reportedThreadId) {
+        // Public thread reported - generate AI summary
+        const summary = await this.toxicityService.generateThreadSummary(reportedThreadId, false);
+        await threads.update(
+          { 
+            aiSummary: summary,
+            aiSummaryUpdatedAt: new Date()
+          },
+          { where: { id: reportedThreadId }, transaction }
+        );
+      } else if (statusId === 2 && reportedP_ThreadId) {
+        // Private thread reported - generate AI summary
+        const summary = await this.toxicityService.generateThreadSummary(reportedP_ThreadId, true);
+        await privateThreads.update(
+          { 
+            aiSummary: summary,
+            aiSummaryUpdatedAt: new Date()
+          },
+          { where: { id: reportedP_ThreadId }, transaction }
+        );
+      } else if (statusId === 3 && reportedUserId) {
+        // User reported - calculate toxicity scores for both users
+        const [reportedUserAnalysis, reporterAnalysis] = await Promise.all([
+          this.toxicityService.calculateUserToxicityScore(reportedUserId, reportedRoleId),
+          this.toxicityService.calculateUserToxicityScore(userId, roleId)
+        ]);
+
+        // Update toxicity data for reported user
+        await this.toxicityService.updateUserToxicityData(
+          reportedUserId,
+          reportedRoleId,
+          reportedUserAnalysis.toxicityScore,
+          reportedUserAnalysis.analysis
+        );
+
+        // Update toxicity data for reporter
+        await this.toxicityService.updateUserToxicityData(
+          userId,
+          roleId,
+          reporterAnalysis.toxicityScore,
+          reporterAnalysis.analysis
+        );
+      }
+    } catch (error) {
+      console.error("Error in automatic AI analysis:", error);
+      // Don't throw error - report creation should succeed even if AI analysis fails
+    }
   };
 
 

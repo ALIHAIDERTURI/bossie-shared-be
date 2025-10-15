@@ -25,6 +25,8 @@ export interface privateThreadsI {
   createdAt?: Date;
   updatedAt?: Date;
   deletedAt?: Date | null;
+  aiSummary?: string | null;
+  aiSummaryUpdatedAt?: Date | null;
 }
 
 @Table({
@@ -86,4 +88,10 @@ export class privateThreads extends Model<privateThreadsI> {
 
   @Column(DataType.DATE)
   public deletedAt: Date;
+
+  @Column(DataType.TEXT('long'))
+  public aiSummary: string | null;
+
+  @Column(DataType.DATE)
+  public aiSummaryUpdatedAt: Date | null;
 }
